@@ -4,28 +4,79 @@ import { Section, Container, Heading, Text, Button, GlassCard } from './ui-compo
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { FileText, Send, Download, Copy, Check } from 'lucide-react';
+import { FileText, Send, Download, Copy, Check, Loader2 } from 'lucide-react';
+import { toast } from "@/hooks/use-toast";
+
+interface GenerateResponse {
+  success: boolean;
+  download_url: string;
+  filename: string;
+}
 
 const DocumentCreator: React.FC = () => {
-  const [prompt, setPrompt] = useState('');
+  const [topic, setTopic] = useState('');
+  const [description, setDescription] = useState('');
+  const [numPages, setNumPages] = useState(3);
   const [documentContent, setDocumentContent] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
   const [activeTab, setActiveTab] = useState('create');
+  const [downloadUrl, setDownloadUrl] = useState('');
+  const [filename, setFilename] = useState('');
 
-  const handleGenerate = () => {
-    if (!prompt.trim()) return;
+  const handleGenerate = async () => {
+    if (!topic.trim()) {
+      toast({
+        title: "Topic required",
+        description: "Please enter a topic for your document",
+        variant: "destructive"
+      });
+      return;
+    }
     
     setIsGenerating(true);
     
-    // Simulate AI generation
-    setTimeout(() => {
-      setDocumentContent(
-        `# ${prompt}\n\n## Introduction\nThis is a sample document generated based on your request: "${prompt}". In a real implementation, this would be created by an AI model that understands your specific requirements and generates appropriate content.\n\n## Key Points\n- Professional formatting applied automatically\n- Content structured for readability\n- Key information highlighted appropriately\n- Conclusions and next steps clearly outlined\n\n## Conclusion\nThe AI has analyzed your request and created this document structure to match your needs. In a production environment, this would be much more detailed and specifically tailored to your exact requirements.`
-      );
+    try {
+      const response = await fetch('https://docx.techrealm.online/generate-document', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          topic: topic,
+          num_pages: numPages
+        }),
+      });
+      
+      const data: GenerateResponse = await response.json();
+      
+      if (data.success) {
+        setDownloadUrl(data.download_url);
+        setFilename(data.filename);
+        setDocumentContent(`Document generated successfully!\n\nTopic: ${topic}\nPages: ${numPages}\n\nClick the Download button to get your document.`);
+        setActiveTab('preview');
+        
+        toast({
+          title: "Document Generated",
+          description: "Your document has been created successfully!",
+        });
+      } else {
+        toast({
+          title: "Generation Failed",
+          description: "There was an error generating your document. Please try again.",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Error generating document:', error);
+      toast({
+        title: "Error",
+        description: "Failed to connect to the document generation service. Please try again later.",
+        variant: "destructive"
+      });
+    } finally {
       setIsGenerating(false);
-      setActiveTab('preview');
-    }, 1500);
+    }
   };
 
   const handleCopy = () => {
@@ -40,17 +91,9 @@ const DocumentCreator: React.FC = () => {
   };
 
   const handleDownload = () => {
-    if (!documentContent) return;
-    
-    const blob = new Blob([documentContent], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${prompt.substring(0, 30)}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    if (downloadUrl) {
+      window.open(downloadUrl, '_blank');
+    }
   };
 
   return (
@@ -92,38 +135,55 @@ const DocumentCreator: React.FC = () => {
                 <div className="space-y-6">
                   <div>
                     <label htmlFor="document-title" className="block text-sm font-medium mb-1">
-                      Document Title
+                      Document Topic
                     </label>
                     <Input 
                       id="document-title"
-                      placeholder="Enter a title for your document"
-                      value={prompt}
-                      onChange={(e) => setPrompt(e.target.value)}
+                      placeholder="Enter a topic for your document"
+                      value={topic}
+                      onChange={(e) => setTopic(e.target.value)}
                       className="w-full"
                     />
                   </div>
                   
                   <div>
                     <label htmlFor="document-description" className="block text-sm font-medium mb-1">
-                      Document Description
+                      Additional Details (Optional)
                     </label>
                     <Textarea 
                       id="document-description"
-                      placeholder="Describe what you want in your document. The more details you provide, the better the result will be."
-                      rows={6}
+                      placeholder="Add any additional details you'd like to include in the document"
+                      rows={4}
                       className="w-full resize-none"
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                    />
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="num-pages" className="block text-sm font-medium mb-1">
+                      Number of Pages
+                    </label>
+                    <Input 
+                      id="num-pages"
+                      type="number"
+                      min={1}
+                      max={10}
+                      value={numPages}
+                      onChange={(e) => setNumPages(parseInt(e.target.value) || 3)}
+                      className="w-full"
                     />
                   </div>
                   
                   <Button 
                     onClick={handleGenerate} 
                     className="w-full"
-                    disabled={!prompt.trim() || isGenerating}
+                    disabled={!topic.trim() || isGenerating}
                   >
                     {isGenerating ? (
                       <>
-                        <span className="mr-2">Generating...</span>
-                        <div className="h-4 w-4 rounded-full border-2 border-current border-r-transparent animate-spin" />
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Generating...
                       </>
                     ) : (
                       <>
@@ -138,7 +198,7 @@ const DocumentCreator: React.FC = () => {
               <TabsContent value="preview" className="mt-0">
                 <div className="space-y-4">
                   <div className="flex justify-between items-center mb-4">
-                    <Text.Large>{prompt}</Text.Large>
+                    <Text.Large>{topic}</Text.Large>
                     <div className="flex space-x-2">
                       <Button variant="outline" size="sm" onClick={handleCopy}>
                         {isCopied ? (
@@ -153,7 +213,7 @@ const DocumentCreator: React.FC = () => {
                           </>
                         )}
                       </Button>
-                      <Button variant="outline" size="sm" onClick={handleDownload}>
+                      <Button variant="outline" size="sm" onClick={handleDownload} disabled={!downloadUrl}>
                         <Download className="mr-1 h-4 w-4" />
                         Download
                       </Button>
@@ -163,6 +223,19 @@ const DocumentCreator: React.FC = () => {
                   <div className="bg-muted/30 rounded-md p-4 overflow-auto max-h-96 whitespace-pre-wrap text-sm font-mono">
                     {documentContent || 'No content generated yet'}
                   </div>
+                  
+                  {filename && (
+                    <div className="flex items-center justify-between border-t pt-4 mt-4">
+                      <div className="flex items-center space-x-2">
+                        <FileText className="h-5 w-5 text-primary" />
+                        <Text.Regular>{filename}</Text.Regular>
+                      </div>
+                      <Button size="sm" onClick={handleDownload}>
+                        <Download className="mr-1 h-4 w-4" />
+                        Download Document
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </TabsContent>
             </div>

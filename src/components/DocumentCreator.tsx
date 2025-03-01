@@ -92,7 +92,18 @@ const DocumentCreator: React.FC = () => {
 
   const handleDownload = () => {
     if (downloadUrl) {
-      window.open(downloadUrl, '_blank');
+      // Create an anchor element and trigger the download
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = filename || 'document.docx';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast({
+        title: "Download Started",
+        description: "Your document is being downloaded.",
+      });
     }
   };
 

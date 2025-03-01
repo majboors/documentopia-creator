@@ -51,7 +51,9 @@ const DocumentCreator: React.FC = () => {
       const data: GenerateResponse = await response.json();
       
       if (data.success) {
-        setDownloadUrl(data.download_url);
+        // Convert download_url to HTTPS if it's HTTP
+        const secureDownloadUrl = data.download_url.replace(/^http:/, 'https:');
+        setDownloadUrl(secureDownloadUrl);
         setFilename(data.filename);
         setDocumentContent(`Document generated successfully!\n\nTopic: ${topic}\nPages: ${numPages}\n\nClick the Download button to get your document.`);
         setActiveTab('preview');

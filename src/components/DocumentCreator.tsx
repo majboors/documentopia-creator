@@ -4,7 +4,7 @@ import { Section, Container, Heading, Text, Button, GlassCard } from './ui-compo
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { FileText, Send, Download, Copy, Check, Loader2 } from 'lucide-react';
+import { FileText, Send, Download, Copy, Check, Loader2, ExternalLink } from 'lucide-react';
 import { toast } from "@/hooks/use-toast";
 
 interface GenerateResponse {
@@ -104,6 +104,9 @@ const DocumentCreator: React.FC = () => {
         title: "Download Started",
         description: "Your document is being downloaded.",
       });
+      
+      // Also open the link in a new tab
+      window.open(downloadUrl, '_blank');
     }
   };
 
@@ -235,16 +238,31 @@ const DocumentCreator: React.FC = () => {
                     {documentContent || 'No content generated yet'}
                   </div>
                   
-                  {filename && (
-                    <div className="flex items-center justify-between border-t pt-4 mt-4">
-                      <div className="flex items-center space-x-2">
-                        <FileText className="h-5 w-5 text-primary" />
-                        <Text.Regular>{filename}</Text.Regular>
+                  {downloadUrl && (
+                    <div className="flex flex-col space-y-4 border-t pt-4 mt-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <FileText className="h-5 w-5 text-primary" />
+                          <Text.Regular>{filename}</Text.Regular>
+                        </div>
+                        <Button size="sm" onClick={handleDownload}>
+                          <Download className="mr-1 h-4 w-4" />
+                          Download Document
+                        </Button>
                       </div>
-                      <Button size="sm" onClick={handleDownload}>
-                        <Download className="mr-1 h-4 w-4" />
-                        Download Document
-                      </Button>
+                      
+                      <div className="flex items-center space-x-2 text-sm">
+                        <Text.Muted>Direct link:</Text.Muted>
+                        <a 
+                          href={downloadUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline flex items-center"
+                        >
+                          {downloadUrl.split('/').pop()} 
+                          <ExternalLink className="ml-1 h-3 w-3" />
+                        </a>
+                      </div>
                     </div>
                   )}
                 </div>

@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Container, Button } from './ui-components';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, CreditCard } from 'lucide-react';
 
 const Header: React.FC = () => {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -13,7 +13,19 @@ const Header: React.FC = () => {
     { label: 'Home', href: '/' },
     { label: 'Create', href: '/create' },
     { label: 'Features', href: '/#features' },
+    { label: 'Pricing', href: '/create#pricing' },
   ];
+
+  const scrollToPricing = (e: React.MouseEvent) => {
+    // If we're already on the create page
+    if (location.pathname === '/create') {
+      e.preventDefault();
+      const pricingSection = document.getElementById('pricing');
+      if (pricingSection) {
+        pricingSection.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+  };
 
   useEffect(() => {
     const handleScroll = () => {
@@ -27,6 +39,18 @@ const Header: React.FC = () => {
   useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [location.pathname]);
+
+  // Scroll to pricing section if the URL has #pricing
+  useEffect(() => {
+    if (location.hash === '#pricing') {
+      setTimeout(() => {
+        const pricingSection = document.getElementById('pricing');
+        if (pricingSection) {
+          pricingSection.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, 100);
+    }
+  }, [location.hash]);
 
   return (
     <header
@@ -46,6 +70,7 @@ const Header: React.FC = () => {
               <li key={item.label}>
                 <Link
                   to={item.href}
+                  onClick={item.label === 'Pricing' ? scrollToPricing : undefined}
                   className={`text-sm font-medium transition-all hover:text-primary ${
                     location.pathname === item.href ? 'text-primary' : 'text-foreground'
                   }`}
@@ -83,6 +108,7 @@ const Header: React.FC = () => {
                 <li key={item.label}>
                   <Link
                     to={item.href}
+                    onClick={item.label === 'Pricing' ? scrollToPricing : undefined}
                     className={`block py-2 text-lg font-medium hover:text-primary ${
                       location.pathname === item.href ? 'text-primary' : 'text-foreground'
                     }`}

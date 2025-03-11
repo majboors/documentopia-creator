@@ -115,19 +115,18 @@ const DocumentCreator: React.FC = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          amount: 5141 // Updated amount
+          amount: 5141 // 14 USD
         }),
       });
       
       const data = await response.json();
       
       if (data.payment_url) {
-        setPaymentUrl(data.payment_url);
-        window.open(data.payment_url, '_blank');
+        window.location.href = data.payment_url;
         
         toast({
           title: "Payment Initiated",
-          description: "You'll be redirected to the payment page.",
+          description: "Redirecting to payment page...",
         });
         
         setShowSubscriptionModal(false);

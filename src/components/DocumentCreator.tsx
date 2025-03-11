@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Section, Container, Heading, Text, Button, GlassCard } from './ui-components';
 import { Textarea } from "@/components/ui/textarea";
@@ -34,7 +33,6 @@ const DocumentCreator: React.FC = () => {
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [paymentUrl, setPaymentUrl] = useState('');
 
-  // Load usage count from localStorage on component mount
   useEffect(() => {
     const storedUsageCount = localStorage.getItem('documentUsageCount');
     if (storedUsageCount) {
@@ -52,7 +50,6 @@ const DocumentCreator: React.FC = () => {
       return;
     }
 
-    // Check if user has already generated a document
     if (usageCount >= 1) {
       setShowSubscriptionModal(true);
       return;
@@ -75,14 +72,12 @@ const DocumentCreator: React.FC = () => {
       const data: GenerateResponse = await response.json();
       
       if (data.success) {
-        // Ensure all URLs use HTTPS by replacing http:// with https://
         const secureDownloadUrl = data.download_url.replace(/^http:\/\//i, 'https://');
         setDownloadUrl(secureDownloadUrl);
         setFilename(data.filename);
         setDocumentContent(`Document generated successfully!\n\nTopic: ${topic}\nPages: ${numPages}\n\nClick the Download button to get your document.`);
         setActiveTab('preview');
         
-        // Increment and save usage count
         const newUsageCount = usageCount + 1;
         setUsageCount(newUsageCount);
         localStorage.setItem('documentUsageCount', newUsageCount.toString());
@@ -135,7 +130,6 @@ const DocumentCreator: React.FC = () => {
           description: "You'll be redirected to the payment page.",
         });
         
-        // Close the modal
         setShowSubscriptionModal(false);
       } else {
         toast({
@@ -169,7 +163,6 @@ const DocumentCreator: React.FC = () => {
 
   const handleDownload = () => {
     if (downloadUrl) {
-      // Create an anchor element and trigger the download
       const link = document.createElement('a');
       link.href = downloadUrl;
       link.download = filename || 'document.docx';
@@ -182,7 +175,6 @@ const DocumentCreator: React.FC = () => {
         description: "Your document is being downloaded.",
       });
       
-      // Also open the link in a new tab
       window.open(downloadUrl, '_blank');
     }
   };
@@ -348,7 +340,6 @@ const DocumentCreator: React.FC = () => {
           </Tabs>
         </GlassCard>
 
-        {/* Pricing Section */}
         <div id="pricing" className="mt-24 max-w-3xl mx-auto scroll-mt-24">
           <div className="text-center mb-12">
             <Heading.H2 className="mb-4">Simple, Transparent Pricing</Heading.H2>
@@ -368,11 +359,11 @@ const DocumentCreator: React.FC = () => {
               <ul className="space-y-3 mb-8 flex-grow">
                 <li className="flex items-start">
                   <Check className="h-5 w-5 text-primary mr-2 flex-shrink-0" />
-                  <Text.Small>Create 1 document</Text.Small>
+                  <Text.Regular>Create 1 document</Text.Regular>
                 </li>
                 <li className="flex items-start">
                   <Check className="h-5 w-5 text-primary mr-2 flex-shrink-0" />
-                  <Text.Small>Basic formatting options</Text.Small>
+                  <Text.Regular>Basic formatting options</Text.Regular>
                 </li>
               </ul>
               <div className="mt-auto">
@@ -395,19 +386,19 @@ const DocumentCreator: React.FC = () => {
               <ul className="space-y-3 mb-8 flex-grow">
                 <li className="flex items-start">
                   <Check className="h-5 w-5 text-primary mr-2 flex-shrink-0" />
-                  <Text.Small>Unlimited document creation</Text.Small>
+                  <Text.Regular>Unlimited document creation</Text.Regular>
                 </li>
                 <li className="flex items-start">
                   <Check className="h-5 w-5 text-primary mr-2 flex-shrink-0" />
-                  <Text.Small>Advanced formatting options</Text.Small>
+                  <Text.Regular>Advanced formatting options</Text.Regular>
                 </li>
                 <li className="flex items-start">
                   <Check className="h-5 w-5 text-primary mr-2 flex-shrink-0" />
-                  <Text.Small>Priority support</Text.Small>
+                  <Text.Regular>Priority support</Text.Regular>
                 </li>
                 <li className="flex items-start">
                   <Check className="h-5 w-5 text-primary mr-2 flex-shrink-0" />
-                  <Text.Small>Download in multiple formats</Text.Small>
+                  <Text.Regular>Download in multiple formats</Text.Regular>
                 </li>
               </ul>
               <div className="mt-auto">
@@ -420,7 +411,6 @@ const DocumentCreator: React.FC = () => {
         </div>
       </Container>
 
-      {/* Subscription Modal */}
       <SubscriptionModal 
         isOpen={showSubscriptionModal} 
         onClose={() => setShowSubscriptionModal(false)}

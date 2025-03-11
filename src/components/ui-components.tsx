@@ -160,6 +160,17 @@ export const Text = {
       {children}
     </p>
   ),
+  Small: ({ className, children, ...props }: React.HTMLAttributes<HTMLParagraphElement>) => (
+    <p 
+      className={cn(
+        "text-sm", 
+        className
+      )} 
+      {...props}
+    >
+      {children}
+    </p>
+  ),
   Muted: ({ className, children, ...props }: React.HTMLAttributes<HTMLParagraphElement>) => (
     <p 
       className={cn(

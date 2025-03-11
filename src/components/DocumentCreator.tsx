@@ -115,7 +115,7 @@ const DocumentCreator: React.FC = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          amount: 5141.5 // 14 USD
+          amount: 5141 // Updated amount
         }),
       });
       

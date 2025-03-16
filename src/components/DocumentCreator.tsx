@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Section, Container, Heading, Text, Button, GlassCard } from './ui-components';
@@ -93,7 +94,7 @@ const DocumentCreator: React.FC = () => {
             // Use user_subscriptions table to track document usage
             const { data, error } = await supabase
               .from('user_subscriptions')
-              .select('presentations_generated')
+              .select('*')
               .eq('user_id', session.user.id)
               .single();
             
@@ -101,8 +102,12 @@ const DocumentCreator: React.FC = () => {
               console.error('Error fetching usage count:', error);
               setUsageCount(0);
             } else {
-              // Ensure we're setting a number value
-              setUsageCount(data ? (typeof data.presentations_generated === 'number' ? data.presentations_generated : 0) : 0);
+              // Set usage count if the data exists
+              if (data && typeof data.presentations_generated === 'number') {
+                setUsageCount(data.presentations_generated);
+              } else {
+                setUsageCount(0);
+              }
             }
           } catch (error) {
             console.error('Error fetching document usage:', error);
@@ -199,13 +204,13 @@ const DocumentCreator: React.FC = () => {
           setUsageCount(newCount);
           
           try {
-            // Update presentations_generated in user_subscriptions table
-            const { error: updateError } = await supabase
-              .from('user_subscriptions')
-              .upsert({
+            // Call the edge function to update document usage
+            const { error: updateError } = await supabase.functions.invoke('update-document-usage', {
+              body: {
                 user_id: user.id,
-                presentations_generated: newCount
-              });
+                count: newCount
+              }
+            });
             
             if (updateError) {
               console.error('Error updating usage count:', updateError);

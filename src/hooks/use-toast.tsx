@@ -71,6 +71,22 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     }, 1000);
   }, []);
   
+  // Listen for toast events from outside React components
+  React.useEffect(() => {
+    const handleToastEvent = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      if (customEvent.detail) {
+        add(customEvent.detail);
+      }
+    };
+    
+    document.addEventListener('toast-event', handleToastEvent);
+    
+    return () => {
+      document.removeEventListener('toast-event', handleToastEvent);
+    };
+  }, [add]);
+  
   const value = React.useMemo(() => ({
     toasts,
     toast: add,
@@ -98,7 +114,7 @@ export function useToast() {
 // Direct toast function for use outside of components
 export const toast = (props: Omit<Toast, "id" | "open">) => {
   // Implementation for non-component usage
-  const toastEvent = new CustomEvent('toast', { detail: props });
+  const toastEvent = new CustomEvent('toast-event', { detail: props });
   document.dispatchEvent(toastEvent);
   
   return { id: "0", dismiss: () => {} };

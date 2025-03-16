@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Loader2, FileText, Settings, Clock } from 'lucide-react';
 import { Section, Container, Heading, Text } from '@/components/ui-components';
 import AuthCheck from '@/components/AuthCheck';
-import { toast } from '@/components/ui/use-toast';
+import { toast } from '@/hooks/use-toast';
 
 // Define types for better type safety
 interface UserData {

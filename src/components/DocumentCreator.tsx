@@ -5,7 +5,6 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Slider } from "@/components/ui/slider"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import AuthCheck from '@/components/AuthCheck';
@@ -67,7 +66,13 @@ const DocumentCreator = () => {
       const data: GenerateDocumentResponse = await response.json();
       
       if (data.success) {
-        setDocumentUrl(data.download_url);
+        // Ensure the download URL has the correct protocol
+        let formattedUrl = data.download_url;
+        if (formattedUrl.startsWith('http://')) {
+          formattedUrl = formattedUrl.replace('http://', 'https://');
+        }
+        
+        setDocumentUrl(formattedUrl);
         setFilename(data.filename);
         toast({
           title: "Document Generated",
@@ -160,7 +165,7 @@ const DocumentCreator = () => {
                           href={documentUrl} 
                           target="_blank" 
                           rel="noopener noreferrer"
-                          className="hover:underline"
+                          className="hover:underline break-all"
                         >
                           {documentUrl}
                         </a>

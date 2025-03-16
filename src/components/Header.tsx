@@ -48,29 +48,41 @@ const Header: React.FC = () => {
 
   const handleSignOut = async () => {
     try {
-      // Force clear the session locally regardless of server response
-      const { error } = await supabase.auth.signOut({ scope: 'local' });
+      // First, show the toast to indicate the process has started
+      toast({
+        title: "Signing Out...",
+        description: "Please wait while we sign you out.",
+      });
       
-      // Even if there's an error, we want to update local state and navigate away
+      // Explicitly reset auth state first
       setIsAuthenticated(false);
       setIsSubscribed(false);
       
-      // Show success toast and navigate home
+      // Then sign out from Supabase - using both local and global scope
+      await supabase.auth.signOut();
+      
+      // Show success toast
       toast({
         title: "Signed Out",
         description: "You have been successfully signed out.",
       });
-      navigate('/');
       
-      // Log error if any, but don't prevent the user from continuing
-      if (error) {
-        console.error('Error signing out:', error);
-      }
+      // Navigate to home page
+      navigate('/');
     } catch (error) {
-      console.error('Unexpected error during sign out:', error);
-      // We still want to clear local state even if there was an error
+      console.error('Error during sign out:', error);
+      
+      // Even if there's an error, we want to clear local state
       setIsAuthenticated(false);
       setIsSubscribed(false);
+      
+      // Show success toast anyway to prevent user confusion
+      toast({
+        title: "Signed Out",
+        description: "You have been signed out locally. Some server operations may have failed.",
+      });
+      
+      // Navigate to home page
       navigate('/');
     }
   };
@@ -116,13 +128,18 @@ const Header: React.FC = () => {
                   Premium
                 </Badge>
               )}
-              <Link to="/create">
+              <Link to="/dashboard">
                 <Button size="sm" variant="ghost">
                   <UserCircle className="mr-2 h-4 w-4" />
                   Dashboard
                 </Button>
               </Link>
-              <Button size="sm" variant="ghost" onClick={handleSignOut}>
+              <Button 
+                size="sm" 
+                variant="ghost" 
+                onClick={handleSignOut}
+                className="hover:bg-red-100 hover:text-red-600 transition-colors"
+              >
                 Sign Out
               </Button>
             </div>

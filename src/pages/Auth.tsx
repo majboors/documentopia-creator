@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -22,7 +23,7 @@ const Auth = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [activeTab, setActiveTab] = useState('signin');
-
+  
   useEffect(() => {
     let isMounted = true;
     let sessionCheckTimeout: NodeJS.Timeout;
@@ -61,12 +62,13 @@ const Auth = () => {
       }
     };
     
+    // Shorter timeout for checking session
     sessionCheckTimeout = setTimeout(() => {
       if (isMounted && checkingSession) {
         console.log('Session check timeout reached');
         setCheckingSession(false);
       }
-    }, 3000);
+    }, 2000); // Reduced from 3000ms to 2000ms
     
     checkSession();
     
@@ -78,11 +80,19 @@ const Auth = () => {
         
         if (session && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION')) {
           console.log('User signed in, redirecting to:', returnUrl);
-          setTimeout(() => {
-            if (isMounted) {
-              navigate(returnUrl);
-            }
-          }, 500);
+          
+          // Force a refresh of the page to ensure authentication state is updated everywhere
+          if (event === 'SIGNED_IN') {
+            localStorage.setItem('auth_redirect_url', returnUrl);
+            window.location.href = returnUrl;
+          } else {
+            // For other events, use navigate
+            setTimeout(() => {
+              if (isMounted) {
+                navigate(returnUrl);
+              }
+            }, 300);
+          }
         }
       }
     );
@@ -123,7 +133,9 @@ const Auth = () => {
         description: 'You have successfully signed in.',
       });
       
-      // Redirect is handled by the onAuthStateChange listener
+      // Force a redirect instead of relying solely on onAuthStateChange
+      localStorage.setItem('auth_redirect_url', returnUrl);
+      window.location.href = returnUrl;
     } catch (error: any) {
       console.error('Sign in error:', error.message);
       toast({
@@ -163,12 +175,20 @@ const Auth = () => {
       
       console.log('Sign up successful:', data);
       
-      toast({
-        title: 'Success',
-        description: 'Check your email for the confirmation link or continue if auto-confirmed',
-      });
-      
-      if (!data.session) {
+      if (data.session) {
+        toast({
+          title: 'Account Created',
+          description: 'Your account has been created and you are now logged in.',
+        });
+        
+        // Force a redirect instead of relying solely on onAuthStateChange
+        localStorage.setItem('auth_redirect_url', returnUrl);
+        window.location.href = returnUrl;
+      } else {
+        toast({
+          title: 'Success',
+          description: 'Check your email for the confirmation link.',
+        });
         setActiveTab('signin');
       }
     } catch (error: any) {
@@ -324,4 +344,3 @@ const Auth = () => {
 };
 
 export default Auth;
-

@@ -1,11 +1,44 @@
 
-import React, { useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import Header from '@/components/Header';
 import DocumentCreator from '@/components/DocumentCreator';
+import { supabase } from '@/integrations/supabase/client';
+import { Loader2 } from 'lucide-react';
 
 const Creator = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+
+  // Check auth status on component mount
+  useEffect(() => {
+    const checkAuthStatus = async () => {
+      // Check if there's a redirect URL in localStorage (set by Auth.tsx)
+      const redirectUrl = localStorage.getItem('auth_redirect_url');
+      if (redirectUrl) {
+        localStorage.removeItem('auth_redirect_url');
+      }
+
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) {
+          console.error('Error checking auth status:', error);
+        }
+        
+        if (!data.session) {
+          console.log('No active session found, redirecting to auth page');
+          navigate('/auth', { state: { returnUrl: '/create' } });
+        }
+      } catch (error) {
+        console.error('Error in auth check:', error);
+      } finally {
+        setIsCheckingAuth(false);
+      }
+    };
+
+    checkAuthStatus();
+  }, [navigate]);
 
   // Scroll to pricing section if the URL has #pricing
   useEffect(() => {
@@ -18,6 +51,17 @@ const Creator = () => {
       }, 100);
     }
   }, [location.hash]);
+
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">Checking authentication...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background/95 to-muted/30">

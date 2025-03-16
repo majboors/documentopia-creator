@@ -37,6 +37,7 @@ enabled = false
 [storage]
 enabled = false
 
+# Proper format for functions section
 [functions]
 enabled = true
 

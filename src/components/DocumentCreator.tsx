@@ -104,7 +104,7 @@ const DocumentCreator: React.FC = () => {
             .eq('user_id', session.user.id)
             .maybeSingle();
           
-          if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned" error
+          if (error && error.code !== 'PGRST116') {
             console.error('Error fetching usage count:', error);
           } else {
             const hasUsedTrial = data?.free_trial_used || false;
@@ -146,7 +146,7 @@ const DocumentCreator: React.FC = () => {
           email: session.user.email,
         });
         setIsAnonymousUser(false);
-        checkAuth(); // Refresh user data after sign in
+        checkAuth();
       } else if (event === 'SIGNED_OUT') {
         setIsAnonymousUser(true);
       }
@@ -158,8 +158,43 @@ const DocumentCreator: React.FC = () => {
   }, [navigate]);
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    navigate('/auth');
+    try {
+      toast({
+        title: "Signing Out...",
+        description: "Please wait while we sign you out.",
+      });
+      
+      setIsAnonymousUser(true);
+      setUser({ id: undefined, email: undefined });
+      setIsSubscribed(false);
+      setUsedFreeTrial(false);
+      setUsageCount(0);
+      
+      await supabase.auth.signOut();
+      
+      toast({
+        title: "Signed Out",
+        description: "You have been successfully signed out.",
+      });
+      
+      navigate('/auth');
+    } catch (error) {
+      console.error('Error during sign out:', error);
+      
+      setIsAnonymousUser(true);
+      setUser({ id: undefined, email: undefined });
+      setIsSubscribed(false);
+      setUsedFreeTrial(false);
+      setUsageCount(0);
+      
+      toast({
+        title: "Sign Out Error",
+        description: "There was a problem signing out. Please try again.",
+        variant: "destructive"
+      });
+      
+      navigate('/auth');
+    }
   };
 
   const handleSignIn = () => {

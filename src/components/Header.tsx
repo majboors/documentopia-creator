@@ -67,8 +67,8 @@ const Header: React.FC = () => {
         description: "You have been successfully signed out.",
       });
       
-      // Navigate to home page
-      navigate('/');
+      // Navigate to auth page instead of home page
+      navigate('/auth');
     } catch (error) {
       console.error('Error during sign out:', error);
       
@@ -76,19 +76,20 @@ const Header: React.FC = () => {
       setIsAuthenticated(false);
       setIsSubscribed(false);
       
-      // Show success toast anyway to prevent user confusion
+      // Show error toast
       toast({
-        title: "Signed Out",
-        description: "You have been signed out locally. Some server operations may have failed.",
+        title: "Sign Out Error",
+        description: "There was a problem signing out. Please try again.",
+        variant: "destructive"
       });
       
-      // Navigate to home page
-      navigate('/');
+      // Navigate to auth page
+      navigate('/auth');
     }
   };
 
   const handleSignIn = () => {
-    navigate('/auth');
+    navigate('/auth', { state: { returnUrl: location.pathname } });
   };
 
   return (

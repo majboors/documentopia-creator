@@ -39,16 +39,21 @@ enabled = false
 
 [functions]
 enabled = true
+
+[functions.serve]
 port = 54321
 
-[[functions.routes]]
-path = "verify-payment"
-function = "verify-payment"
- 
-[[functions.routes]]
-path = "payment-callback"
-function = "payment-callback"
+[[functions.serve.functions]]
+name = "verify-payment"
+verify_jwt = false
+pattern = "verify-payment"
 
-[[functions.routes]]
-path = "update-document-usage"
-function = "update-document-usage"
+[[functions.serve.functions]]
+name = "payment-callback"
+verify_jwt = false
+pattern = "payment-callback"
+
+[[functions.serve.functions]]
+name = "update-document-usage"
+verify_jwt = false
+pattern = "update-document-usage"

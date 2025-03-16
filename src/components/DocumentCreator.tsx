@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Section, Container, Heading, Text, Button, GlassCard } from './ui-components';
@@ -88,13 +87,13 @@ const DocumentCreator: React.FC = () => {
           email: session.user.email,
         });
         
-        // Get user's document usage count using Edge Function
+        // Get user's document usage count
         if (session.user.id) {
           try {
-            // First check if the document_usage record exists
+            // Use user_subscriptions table to track document usage
             const { data, error } = await supabase
-              .from('document_usage')
-              .select('count')
+              .from('user_subscriptions')
+              .select('presentations_generated')
               .eq('user_id', session.user.id)
               .single();
             
@@ -103,7 +102,7 @@ const DocumentCreator: React.FC = () => {
               setUsageCount(0);
             } else {
               // Ensure we're setting a number value
-              setUsageCount(data ? (typeof data.count === 'number' ? data.count : 0) : 0);
+              setUsageCount(data ? (typeof data.presentations_generated === 'number' ? data.presentations_generated : 0) : 0);
             }
           } catch (error) {
             console.error('Error fetching document usage:', error);
@@ -195,24 +194,24 @@ const DocumentCreator: React.FC = () => {
         setActiveTab('preview');
         
         if (user.id) {
-          // Update usage count in the database using edge function
+          // Update usage count
           const newCount = usageCount + 1;
           setUsageCount(newCount);
           
           try {
-            // Update document usage with edge function
-            const { data: updateData, error: updateError } = await supabase.functions.invoke('update-document-usage', {
-              body: { 
+            // Update presentations_generated in user_subscriptions table
+            const { error: updateError } = await supabase
+              .from('user_subscriptions')
+              .upsert({
                 user_id: user.id,
-                count: newCount
-              }
-            });
+                presentations_generated: newCount
+              });
             
             if (updateError) {
               console.error('Error updating usage count:', updateError);
             }
           } catch (error) {
-            console.error('Error invoking update-document-usage function:', error);
+            console.error('Error updating document usage:', error);
           }
         }
         

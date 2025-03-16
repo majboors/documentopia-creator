@@ -31,13 +31,13 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
     
-    // Update the document usage count
+    // Update the presentations_generated count in user_subscriptions table
     const { data, error } = await supabase
-      .from("document_usage")
+      .from("user_subscriptions")
       .upsert({ 
         user_id, 
-        count, 
-        last_used: new Date().toISOString() 
+        presentations_generated: count,
+        updated_at: new Date().toISOString() 
       });
     
     if (error) {

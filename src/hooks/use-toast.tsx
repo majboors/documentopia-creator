@@ -4,25 +4,26 @@ import { createContext, useContext, useState } from "react";
 
 const TOAST_REMOVE_DELAY = 1000;
 
-type ToasterToast = Toast & {
-  id: string;
-  title?: React.ReactNode;
-  description?: React.ReactNode;
-  action?: React.ReactElement;
-};
-
-type ToastActionElement = React.ReactElement<{
-  altText: string;
-  onClick: () => void;
-}>;
-
-type Toast = {
+// Base toast type
+type BaseToast = {
   id?: string;
   title?: React.ReactNode;
   description?: React.ReactNode;
   action?: ToastActionElement;
   variant?: "default" | "destructive";
 };
+
+// Full toast type with required ID and open state
+type ToasterToast = BaseToast & {
+  id: string;
+  open: boolean;
+  onOpenChange?: (open: boolean) => void;
+};
+
+type ToastActionElement = React.ReactElement<{
+  altText: string;
+  onClick: () => void;
+}>;
 
 const actionTypes = {
   ADD_TOAST: "ADD_TOAST",
@@ -145,16 +146,7 @@ function dispatch(action: Action) {
   });
 }
 
-interface Toast {
-  id: string;
-  title?: React.ReactNode;
-  description?: React.ReactNode;
-  action?: ToastActionElement;
-  open: boolean;
-  variant?: "default" | "destructive";
-}
-
-type ToastOptions = Omit<Toast, "id" | "open">;
+type ToastOptions = Omit<BaseToast, "id">;
 
 function toast({ ...props }: ToastOptions) {
   const id = genId();

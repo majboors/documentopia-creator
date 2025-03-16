@@ -122,6 +122,7 @@ export type Database = {
       user_subscriptions: {
         Row: {
           created_at: string | null
+          free_trial_used: boolean | null
           id: string
           is_subscribed: boolean | null
           payment_reference: string | null
@@ -132,6 +133,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          free_trial_used?: boolean | null
           id?: string
           is_subscribed?: boolean | null
           payment_reference?: string | null
@@ -142,6 +144,7 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          free_trial_used?: boolean | null
           id?: string
           is_subscribed?: boolean | null
           payment_reference?: string | null

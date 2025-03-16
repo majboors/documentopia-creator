@@ -41,10 +41,10 @@ const Index = () => {
       navigate('/create');
     } else {
       toast({
-        title: "Authentication Required",
-        description: "Please sign in to create documents",
+        title: "Try For Free",
+        description: "Create your first document for free, or sign in for full access",
       });
-      navigate('/auth', { state: { returnUrl: '/create' } });
+      navigate('/create'); // Allow unauthenticated users to access the create page for trial
     }
   };
 
@@ -67,7 +67,7 @@ const Index = () => {
           <div className="grid md:grid-cols-3 gap-6 mb-12">
             {exampleDocs.map((doc, i) => (
               <div key={i}>
-                <AuthCheck message="Sign in to use templates">
+                <AuthCheck message="Sign in to use templates" allowTrial={true}>
                   <Link to="/create">
                     <DocumentCard
                       title={doc.title}
@@ -83,13 +83,11 @@ const Index = () => {
           </div>
           
           <div className="text-center">
-            <AuthCheck message="Sign in to create documents">
-              <Button asChild>
-                <Link to="/create">
-                  Create Your Document <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
-              </Button>
-            </AuthCheck>
+            <Button asChild>
+              <Link to="/create" onClick={handleCreateClick}>
+                Create Your Document <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
           </div>
         </Container>
       </Section>
@@ -102,13 +100,11 @@ const Index = () => {
               Start creating professional documents with AI assistance today.
               Save time and get better results.
             </Text.Lead>
-            <AuthCheck message="Sign in to get started">
-              <Button size="lg" asChild>
-                <Link to="/create">
-                  Get Started <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
-              </Button>
-            </AuthCheck>
+            <Button size="lg" asChild>
+              <Link to="/create" onClick={handleCreateClick}>
+                Get Started <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
           </div>
         </Container>
       </Section>

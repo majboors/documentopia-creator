@@ -1,11 +1,10 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Section, Container, Heading, Text, Button, GlassCard } from './ui-components';
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { FileText, Send, Download, Copy, Check, Loader2, ExternalLink, CreditCard, LogOut, Crown, Diamond, Star } from 'lucide-react';
+import { FileText, Send, Download, Copy, Check, Loader2, ExternalLink, CreditCard, LogOut, Crown, Diamond, Star, UserCircle } from 'lucide-react';
 import { toast } from "@/hooks/use-toast";
 import SubscriptionModal from './SubscriptionModal';
 import { supabase } from "@/integrations/supabase/client";
@@ -47,6 +46,8 @@ const DocumentCreator: React.FC = () => {
   const [user, setUser] = useState<UserSession>({ id: undefined, email: undefined });
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [usedFreeTrial, setUsedFreeTrial] = useState(false);
+  const [isAnonymousUser, setIsAnonymousUser] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -85,7 +86,9 @@ const DocumentCreator: React.FC = () => {
         const { data: { session } } = await supabase.auth.getSession();
         
         if (!session) {
-          navigate('/auth');
+          setIsAnonymousUser(true);
+          setUsedFreeTrial(false);
+          setIsLoading(false);
           return;
         }
         
@@ -94,22 +97,19 @@ const DocumentCreator: React.FC = () => {
           email: session.user.email,
         });
         
-        let documentCount = 0;
-        
         try {
           const { data, error } = await supabase
             .from('user_subscriptions')
             .select('*')
             .eq('user_id', session.user.id)
-            .single();
+            .maybeSingle();
           
           if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned" error
             console.error('Error fetching usage count:', error);
           } else {
-            if (data && data.is_subscribed === false) {
-              documentCount = 1;
-            }
-            setUsageCount(documentCount);
+            const hasUsedTrial = data?.free_trial_used || false;
+            setUsedFreeTrial(hasUsedTrial);
+            setUsageCount(hasUsedTrial ? 1 : 0);
           }
         } catch (error) {
           console.error('Error fetching document usage:', error);
@@ -145,8 +145,10 @@ const DocumentCreator: React.FC = () => {
           id: session.user.id,
           email: session.user.email,
         });
+        setIsAnonymousUser(false);
+        checkAuth(); // Refresh user data after sign in
       } else if (event === 'SIGNED_OUT') {
-        navigate('/auth');
+        setIsAnonymousUser(true);
       }
     });
     
@@ -160,6 +162,10 @@ const DocumentCreator: React.FC = () => {
     navigate('/auth');
   };
 
+  const handleSignIn = () => {
+    navigate('/auth', { state: { returnUrl: '/create' } });
+  };
+
   const handleGenerate = async () => {
     if (!topic.trim()) {
       toast({
@@ -170,7 +176,20 @@ const DocumentCreator: React.FC = () => {
       return;
     }
 
-    if (usageCount >= 1 && !isSubscribed) {
+    if (isAnonymousUser) {
+      if (usedFreeTrial) {
+        toast({
+          title: "Free Trial Used",
+          description: "Please sign in to continue or subscribe for unlimited access",
+          variant: "destructive"
+        });
+        setShowSubscriptionModal(true);
+        return;
+      }
+      
+      setUsedFreeTrial(true);
+    }
+    else if (usageCount >= 1 && !isSubscribed) {
       setShowSubscriptionModal(true);
       return;
     }
@@ -199,20 +218,20 @@ const DocumentCreator: React.FC = () => {
         setActiveTab('preview');
         
         if (user.id) {
-          const newCount = usageCount + 1;
-          setUsageCount(newCount);
-          
           try {
             const { error: updateError } = await supabase.functions.invoke('update-document-usage', {
               body: {
                 user_id: user.id,
-                count: newCount
+                count: 1
               }
             });
             
             if (updateError) {
               console.error('Error updating usage count:', updateError);
             }
+            
+            setUsageCount(1);
+            setUsedFreeTrial(true);
           } catch (error) {
             console.error('Error updating document usage:', error);
           }
@@ -350,14 +369,23 @@ const DocumentCreator: React.FC = () => {
                 </Badge>
               )}
             </div>
-            {user.email && (
+            {isAnonymousUser ? (
+              <div className="flex items-center gap-2">
+                <Text.Muted>You're using guest mode</Text.Muted>
+                <Button variant="link" size="sm" className="p-0 h-auto" onClick={handleSignIn}>
+                  Sign in for more features
+                </Button>
+              </div>
+            ) : user.email && (
               <Text.Muted>Logged in as {user.email}</Text.Muted>
             )}
           </div>
-          <Button variant="outline" size="sm" onClick={handleSignOut}>
-            <LogOut className="mr-2 h-4 w-4" />
-            Sign Out
-          </Button>
+          {!isAnonymousUser && (
+            <Button variant="outline" size="sm" onClick={handleSignOut}>
+              <LogOut className="mr-2 h-4 w-4" />
+              Sign Out
+            </Button>
+          )}
         </div>
 
         {isSubscribed ? (
@@ -368,14 +396,20 @@ const DocumentCreator: React.FC = () => {
               <span className="text-purple-600 dark:text-purple-400">- You have unlimited document creation</span>
             </AlertDescription>
           </Alert>
+        ) : isAnonymousUser ? (
+          <Alert className="max-w-3xl mx-auto mb-6">
+            <AlertDescription className="text-center py-1">
+              {usedFreeTrial ? 
+                "You've used your free document. Sign in or subscribe for unlimited access." :
+                "Welcome! You can create one document for free. Sign in for more."}
+            </AlertDescription>
+          </Alert>
         ) : (
           <Alert className="max-w-3xl mx-auto mb-6">
             <AlertDescription className="text-center py-1">
-              {usageCount === 0 ? (
-                "You have 1 free document creation."
-              ) : (
-                "You've used your free document. Subscribe for unlimited access."
-              )}
+              {usageCount === 0 ? 
+                "You have 1 free document creation." : 
+                "You've used your free document. Subscribe for unlimited access."}
             </AlertDescription>
           </Alert>
         )}
@@ -467,7 +501,12 @@ const DocumentCreator: React.FC = () => {
                   <Button 
                     onClick={handleGenerate} 
                     className={`w-full ${isSubscribed ? 'bg-purple-600 hover:bg-purple-700' : ''}`}
-                    disabled={!topic.trim() || isGenerating || (usageCount >= 1 && !isSubscribed)}
+                    disabled={
+                      !topic.trim() || 
+                      isGenerating || 
+                      (usageCount >= 1 && !isSubscribed && !isAnonymousUser) ||
+                      (usedFreeTrial && isAnonymousUser)
+                    }
                   >
                     {isGenerating ? (
                       <>
@@ -483,16 +522,29 @@ const DocumentCreator: React.FC = () => {
                     )}
                   </Button>
                   
-                  {usageCount >= 1 && !isSubscribed && (
+                  {((usageCount >= 1 && !isSubscribed && !isAnonymousUser) || (usedFreeTrial && isAnonymousUser)) && (
                     <div className="text-center mt-4">
                       <Text.Muted>You've used your free document creation.</Text.Muted>
-                      <Button 
-                        variant="link" 
-                        onClick={() => setShowSubscriptionModal(true)}
-                        className="mt-1"
-                      >
-                        Subscribe for unlimited access
-                      </Button>
+                      <div className="flex justify-center gap-2 mt-2">
+                        {isAnonymousUser && (
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={handleSignIn}
+                          >
+                            <UserCircle className="mr-2 h-4 w-4" />
+                            Sign In
+                          </Button>
+                        )}
+                        <Button 
+                          variant="default" 
+                          size="sm" 
+                          onClick={() => setShowSubscriptionModal(true)}
+                        >
+                          <Crown className="mr-2 h-4 w-4" />
+                          Subscribe
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </div>

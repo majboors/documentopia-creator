@@ -36,9 +36,9 @@ const handler = async (req: Request): Promise<Response> => {
       .from("user_subscriptions")
       .select("*")
       .eq("user_id", user_id)
-      .single();
+      .maybeSingle();
     
-    if (fetchError && fetchError.code !== "PGRST116") { // PGRST116 is "no rows returned" error
+    if (fetchError) {
       console.error("Error fetching user subscription:", fetchError);
       return new Response(
         JSON.stringify({ error: fetchError.message }),
@@ -49,13 +49,14 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
     
-    // Update the is_subscribed field to track usage indirectly (for now)
+    // Update the record tracking free trial usage
     // Also update the updated_at timestamp
     const { data, error } = await supabase
       .from("user_subscriptions")
       .upsert({ 
         user_id, 
-        is_subscribed: count > 0 ? false : true, // We'll use this to track usage indirectly
+        free_trial_used: count > 0, // Track if free trial has been used
+        is_subscribed: existingData?.is_subscribed || false, // Don't change subscription status
         updated_at: new Date().toISOString() 
       });
     

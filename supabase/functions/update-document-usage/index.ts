@@ -25,6 +25,7 @@ Deno.serve(async (req) => {
 
     // Check request method
     if (req.method !== 'POST') {
+      console.error('Invalid method:', req.method);
       return new Response(
         JSON.stringify({ error: 'Method not allowed' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 405 }
@@ -32,17 +33,18 @@ Deno.serve(async (req) => {
     }
 
     // Parse request body
-    const { user_id, count } = await req.json() as RequestPayload;
+    const payload = await req.json();
+    const { user_id, count } = payload as RequestPayload;
     
     if (!user_id) {
       console.error('Missing user_id in request');
       return new Response(
-        JSON.stringify({ error: 'Missing required field: user_id' }),
+        JSON.stringify({ error: 'Missing required field: user_id', received: payload }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
     }
 
-    console.log(`Updating usage for user: ${user_id} with count: ${count}`);
+    console.log(`Updating usage for user: ${user_id} with count: ${count || 1}`);
 
     // First check if user_subscriptions entry exists for this user
     const { data: existingUserSub, error: checkError } = await supabaseClient

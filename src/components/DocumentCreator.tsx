@@ -4,7 +4,6 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Slider } from "@/components/ui/slider"
-import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { toast } from '@/hooks/use-toast';
 import { Toaster } from "@/components/ui/toaster";
@@ -48,7 +47,7 @@ const DocumentCreator = () => {
       setCheckingAuthStatus(true);
       
       try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        const { data, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError) {
           console.error('Error getting session:', sessionError);
@@ -59,36 +58,39 @@ const DocumentCreator = () => {
           return;
         }
         
-        if (session?.user?.id) {
+        if (data.session?.user?.id) {
           if (isMounted) {
-            setUserId(session.user.id);
+            setUserId(data.session.user.id);
             setIsAuthenticated(true);
           }
           
-          const localTrialUsed = localStorage.getItem(`${TRIAL_USED_KEY}_${session.user.id}`);
+          const localTrialUsed = localStorage.getItem(`${TRIAL_USED_KEY}_${data.session.user.id}`);
           if (localTrialUsed === 'true' && isMounted) {
             setFreeTrialUsed(true);
           }
           
           try {
-            const { data, error } = await supabase
+            const { data: subscriptionData, error } = await supabase
               .from('user_subscriptions')
               .select('free_trial_used, is_subscribed')
-              .eq('user_id', session.user.id)
+              .eq('user_id', data.session.user.id)
               .maybeSingle();
             
             if (error) {
               console.error('Error fetching subscription status:', error);
-            } else if (data && isMounted) {
-              setFreeTrialUsed(data.free_trial_used || false);
-              setIsSubscribed(data.is_subscribed || false);
+            } else if (subscriptionData && isMounted) {
+              setFreeTrialUsed(subscriptionData.free_trial_used || false);
+              setIsSubscribed(subscriptionData.is_subscribed || false);
               
-              localStorage.setItem(`${TRIAL_USED_KEY}_${session.user.id}`, data.free_trial_used ? 'true' : 'false');
+              localStorage.setItem(
+                `${TRIAL_USED_KEY}_${data.session.user.id}`, 
+                subscriptionData.free_trial_used ? 'true' : 'false'
+              );
             } else if (isMounted) {
               const { error: insertError } = await supabase
                 .from('user_subscriptions')
                 .insert({
-                  user_id: session.user.id,
+                  user_id: data.session.user.id,
                   is_subscribed: false,
                   free_trial_used: false
                 });
@@ -140,10 +142,9 @@ const DocumentCreator = () => {
           setFreeTrialUsed(false);
           setIsSubscribed(false);
           setCheckingAuthStatus(false);
-        } else if (event === 'SIGNED_IN' && session) {
+        } else if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
           setIsAuthenticated(true);
           setUserId(session.user.id);
-          setCheckingAuthStatus(true);
           
           try {
             const { data, error } = await supabase
@@ -153,7 +154,7 @@ const DocumentCreator = () => {
               .maybeSingle();
             
             if (error) {
-              console.error('Error fetching subscription status:', error);
+              console.error('Error fetching subscription status after auth change:', error);
             } else if (data) {
               setFreeTrialUsed(data.free_trial_used || false);
               setIsSubscribed(data.is_subscribed || false);
@@ -168,11 +169,11 @@ const DocumentCreator = () => {
                 });
                 
               if (insertError) {
-                console.error('Error creating user subscription record:', insertError);
+                console.error('Error creating user subscription record after auth change:', insertError);
               }
             }
           } catch (error) {
-            console.error('Error checking subscription after sign in:', error);
+            console.error('Error checking subscription after auth change:', error);
           } finally {
             setCheckingAuthStatus(false);
           }
@@ -595,17 +596,7 @@ const DocumentCreator = () => {
       <SubscriptionModal 
         isOpen={showSubscriptionModal}
         onClose={closeSubscriptionModal}
-        onPayment={() => {
-          setIsProcessingPayment(true);
-          setTimeout(() => {
-            toast({
-              title: "Subscription Required",
-              description: "This is a demo. In a real app, you would be redirected to a payment gateway.",
-            });
-            setIsProcessingPayment(false);
-            setShowSubscriptionModal(false);
-          }, 2000);
-        }}
+        onPayment={handlePayment}
         isProcessing={isProcessingPayment}
       />
       <Toaster />

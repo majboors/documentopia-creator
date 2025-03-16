@@ -58,7 +58,7 @@ const Header: React.FC = () => {
       setIsAuthenticated(false);
       setIsSubscribed(false);
       
-      // Then sign out from Supabase - using both local and global scope
+      // Then sign out from Supabase
       await supabase.auth.signOut();
       
       // Show success toast
@@ -85,6 +85,10 @@ const Header: React.FC = () => {
       // Navigate to home page
       navigate('/');
     }
+  };
+
+  const handleSignIn = () => {
+    navigate('/auth');
   };
 
   return (
@@ -144,11 +148,9 @@ const Header: React.FC = () => {
               </Button>
             </div>
           ) : (
-            <Link to="/auth">
-              <Button size="sm">
-                Sign In
-              </Button>
-            </Link>
+            <Button size="sm" onClick={handleSignIn}>
+              Sign In
+            </Button>
           )}
         </div>
       </div>

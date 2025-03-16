@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCompletion } from 'ai/react';
@@ -8,8 +9,9 @@ import { Slider } from "@/components/ui/slider"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { AuthCheck } from '@/components/AuthCheck';
-import { Toaster, toast } from '@/hooks/use-toast';
+import AuthCheck from '@/components/AuthCheck';
+import { toast } from '@/hooks/use-toast';
+import { Toaster } from "@/components/ui/toaster";
 
 const DocumentCreator = () => {
   const navigate = useNavigate();

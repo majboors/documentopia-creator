@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Textarea } from "@/components/ui/textarea"
@@ -41,6 +40,7 @@ const DocumentCreator = () => {
   const [authRetryCount, setAuthRetryCount] = useState(0);
   const [preventRedirect, setPreventRedirect] = useState(false);
   const [trialStatusChecked, setTrialStatusChecked] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   const checkUserSession = useCallback(async () => {
     try {
@@ -334,6 +334,7 @@ const DocumentCreator = () => {
 
   const generateDocument = async (e: React.FormEvent) => {
     e.preventDefault();
+    setApiError(null);
 
     if (!isAuthenticated) {
       if (preventRedirect) {
@@ -417,7 +418,14 @@ const DocumentCreator = () => {
         }
       }
       
-      const response = await fetch('https://docx.techrealm.online/generate-document', {
+      console.log("Sending generation request to API...");
+      
+      // Use a timeout to protect against API hanging
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Request timed out. Please try again.")), 60000)
+      );
+      
+      const fetchPromise = fetch('https://docx.techrealm.online/generate-document', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -427,12 +435,19 @@ const DocumentCreator = () => {
           num_pages: numPages
         }),
       });
+      
+      // Race between the fetch and the timeout
+      const response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
 
       if (!response.ok) {
-        throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+        console.error(`Server responded with ${response.status}: ${response.statusText}`);
+        const errorText = await response.text();
+        console.error("Error response text:", errorText);
+        throw new Error(`Server error (${response.status}): ${errorText || response.statusText}`);
       }
 
       const data: GenerateDocumentResponse = await response.json();
+      console.log("API response:", data);
       
       if (data.success) {
         let formattedUrl = data.download_url;
@@ -449,11 +464,14 @@ const DocumentCreator = () => {
           variant: "default",
         });
       } else {
-        throw new Error("Failed to generate document");
+        throw new Error("API reported failure: " + (data as any).message || "Unknown error");
       }
     } catch (error: any) {
+      console.error("Document generation error:", error);
+      setApiError(error.message || "Something went wrong. Please try again.");
+      
       toast({
-        title: "Error",
+        title: "Error Generating Document",
         description: error.message || "Something went wrong. Please try again.",
         variant: "destructive",
       });
@@ -596,7 +614,6 @@ const DocumentCreator = () => {
     }
   }, [isAuthenticated, checkingAuthStatus]);
 
-  // Dedicated useEffect for forcing a subscription status check on component mount
   useEffect(() => {
     if (isAuthenticated && userId && !checkingAuthStatus && !trialStatusChecked) {
       const checkSubscriptionStatus = async () => {
@@ -684,6 +701,17 @@ const DocumentCreator = () => {
                   Adjust the number of pages for your document (1-10).
                 </p>
               </div>
+
+              {apiError && (
+                <Alert variant="destructive" className="mt-2">
+                  <AlertTriangleIcon className="h-4 w-4" />
+                  <AlertTitle>Error</AlertTitle>
+                  <AlertDescription>
+                    {apiError}
+                  </AlertDescription>
+                </Alert>
+              )}
+
               <Button 
                 type="submit" 
                 disabled={isLoading || isGenerating || !isAuthenticated || (freeTrialUsed && !isSubscribed)}
@@ -741,7 +769,7 @@ const DocumentCreator = () => {
                       </a>
                     </div>
                     <Button 
-                      onClick={() => window.open(documentUrl, '_blank')} 
+                      onClick={downloadDocument} 
                       className="mt-4 w-full sm:w-auto bg-green-600 hover:bg-green-700 transition-colors"
                     >
                       <FileIcon className="mr-2 h-4 w-4" />

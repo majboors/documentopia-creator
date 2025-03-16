@@ -63,6 +63,19 @@ Deno.serve(async (req) => {
 
     console.log('Existing user subscription:', existingUserSub);
 
+    // If count is 0, just checking status without updating
+    if (count === 0) {
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: 'Status check only', 
+          data: existingUserSub,
+          trial_used: existingUserSub?.free_trial_used || false 
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     if (existingUserSub) {
       // If user is already subscribed, we don't need to mark trial as used
       if (existingUserSub.is_subscribed) {

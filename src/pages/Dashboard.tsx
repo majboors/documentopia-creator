@@ -6,12 +6,26 @@ import { Button } from '@/components/ui/button';
 import { Loader2, FileText, Settings, Clock } from 'lucide-react';
 import { Section, Container, Heading, Text } from '@/components/ui-components';
 import AuthCheck from '@/components/AuthCheck';
+import { toast } from '@/components/ui/use-toast';
+
+// Define types for better type safety
+interface UserData {
+  email: string | null;
+  id: string;
+}
+
+interface Document {
+  id: string;
+  title: string;
+  content?: any;
+  created_at: string;
+}
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [userData, setUserData] = useState<any>(null);
-  const [documents, setDocuments] = useState<any[]>([]);
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const [documents, setDocuments] = useState<Document[]>([]);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -29,25 +43,31 @@ const Dashboard = () => {
           id: session.user.id,
         });
         
-        // Fetch user documents (assuming there's a documents table)
-        // If you don't have a documents table yet, this will be empty
-        try {
-          const { data: docsData, error } = await supabase
-            .from('documents')
-            .select('*')
-            .eq('user_id', session.user.id)
-            .order('created_at', { ascending: false });
-            
-          if (!error && docsData) {
-            setDocuments(docsData);
-          }
-        } catch (error) {
+        // Fetch user documents from the newly created documents table
+        const { data: docsData, error } = await supabase
+          .from('documents')
+          .select('id, title, content, created_at')
+          .eq('user_id', session.user.id)
+          .order('created_at', { ascending: false });
+          
+        if (error) {
           console.error('Error fetching documents:', error);
-          // Just continue if there's no documents table yet
+          toast({
+            title: "Error fetching documents",
+            description: error.message,
+            variant: "destructive"
+          });
+        } else {
+          setDocuments(docsData || []);
         }
         
       } catch (error) {
         console.error('Error fetching user data:', error);
+        toast({
+          title: "Error loading dashboard",
+          description: "There was a problem loading your dashboard data.",
+          variant: "destructive"
+        });
       } finally {
         setLoading(false);
       }

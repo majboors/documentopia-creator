@@ -22,7 +22,11 @@ const Creator = () => {
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/30">
       <Header />
-      <DocumentCreator />
+      <div className="container mx-auto pt-6 pb-16">
+        <h1 className="text-4xl font-bold text-center mb-2">Document Creator</h1>
+        <p className="text-center text-muted-foreground mb-8">Generate professional documents in seconds</p>
+        <DocumentCreator />
+      </div>
     </div>
   );
 };

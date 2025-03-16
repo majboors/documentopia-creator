@@ -10,10 +10,11 @@ import { Label } from "@/components/ui/label"
 import AuthCheck from '@/components/AuthCheck';
 import { toast } from '@/hooks/use-toast';
 import { Toaster } from "@/components/ui/toaster";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Link2Icon } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Link2Icon, FileIcon, BookOpenIcon, AlertTriangleIcon, CheckCircle2Icon } from "lucide-react";
 import { supabase } from '@/integrations/supabase/client';
 import SubscriptionModal from '@/components/SubscriptionModal';
+import { Badge } from '@/components/ui-components';
 
 interface GenerateDocumentResponse {
   success: boolean;
@@ -35,6 +36,7 @@ const DocumentCreator = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
   // Check user subscription status on component mount
   useEffect(() => {
@@ -44,6 +46,7 @@ const DocumentCreator = () => {
       
       if (session?.user?.id) {
         setUserId(session.user.id);
+        setIsAuthenticated(true);
         
         // First check localStorage for a quick response
         const localTrialUsed = localStorage.getItem(`${TRIAL_USED_KEY}_${session.user.id}`);
@@ -75,17 +78,14 @@ const DocumentCreator = () => {
           console.error('Error in subscription status check:', error);
         }
       } else {
-        // For unauthenticated users, we'll rely on the AuthCheck component
+        // For unauthenticated users
         setUserId(null);
+        setIsAuthenticated(false);
       }
     };
     
     checkUserStatus();
   }, []);
-
-  const handleSignIn = () => {
-    navigate('/auth', { state: { returnUrl: '/create' } });
-  };
 
   const updateTrialUsage = async () => {
     if (!userId) return;
@@ -112,6 +112,15 @@ const DocumentCreator = () => {
 
   const generateDocument = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!isAuthenticated) {
+      toast({
+        title: "Authentication Required",
+        description: "Please sign in to generate documents.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     if (!prompt) {
       toast({
@@ -168,6 +177,7 @@ const DocumentCreator = () => {
         toast({
           title: "Document Generated",
           description: "Your document has been successfully generated.",
+          variant: "default",
         });
       } else {
         throw new Error("Failed to generate document");
@@ -207,13 +217,100 @@ const DocumentCreator = () => {
     setShowSubscriptionModal(false);
   };
 
+  const handleSignIn = () => {
+    navigate('/auth', { state: { returnUrl: '/create' } });
+  };
+
+  // Show trial status
+  const renderTrialStatus = () => {
+    if (!isAuthenticated) {
+      return (
+        <Alert variant="default" className="mb-4 bg-primary/10 border-primary/20">
+          <AlertTriangleIcon className="h-4 w-4 text-primary" />
+          <AlertTitle>Authentication Required</AlertTitle>
+          <AlertDescription>
+            Sign in to generate documents. New users get one free document.
+          </AlertDescription>
+          <Button onClick={handleSignIn} size="sm" className="mt-2">
+            Sign In Now
+          </Button>
+        </Alert>
+      );
+    }
+    
+    if (isSubscribed) {
+      return (
+        <Alert variant="default" className="mb-4 bg-green-500/10 border-green-500/20">
+          <CheckCircle2Icon className="h-4 w-4 text-green-500" />
+          <AlertTitle>Premium Account</AlertTitle>
+          <AlertDescription>
+            You have unlimited document generation with your premium subscription.
+          </AlertDescription>
+        </Alert>
+      );
+    }
+    
+    if (freeTrialUsed) {
+      return (
+        <Alert variant="default" className="mb-4 bg-orange-500/10 border-orange-500/20">
+          <AlertTriangleIcon className="h-4 w-4 text-orange-500" />
+          <AlertTitle>Free Trial Used</AlertTitle>
+          <AlertDescription>
+            You've used your free document generation. Upgrade for unlimited access.
+            <Button 
+              onClick={() => setShowSubscriptionModal(true)} 
+              size="sm" 
+              className="mt-2 bg-orange-500 hover:bg-orange-600"
+            >
+              Upgrade Now
+            </Button>
+          </AlertDescription>
+        </Alert>
+      );
+    }
+    
+    return (
+      <Alert variant="default" className="mb-4 bg-blue-500/10 border-blue-500/20">
+        <BookOpenIcon className="h-4 w-4 text-blue-500" />
+        <AlertTitle>Free Trial Available</AlertTitle>
+        <AlertDescription>
+          You can generate one document for free. Upgrade for unlimited access.
+        </AlertDescription>
+      </Alert>
+    );
+  };
+
   return (
     <div className="container relative py-8">
       <div className="mx-auto w-full max-w-2xl lg:max-w-4xl">
+        {renderTrialStatus()}
+        
         <Card className="w-full">
           <CardHeader>
-            <CardTitle>Document Creator</CardTitle>
-            <CardDescription>Enter a topic to generate a professional document.</CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center space-x-2">
+                  <FileIcon className="h-5 w-5 text-primary" />
+                  <span>Document Creator</span>
+                </CardTitle>
+                <CardDescription>Enter a topic to generate a professional document.</CardDescription>
+              </div>
+              {!isAuthenticated ? null : (
+                freeTrialUsed && !isSubscribed ? (
+                  <Badge variant="outline" className="bg-orange-500/10 text-orange-500 border-orange-500/30">
+                    Trial Used
+                  </Badge>
+                ) : isSubscribed ? (
+                  <Badge className="bg-green-500 hover:bg-green-600">
+                    Premium
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/30">
+                    Free Trial
+                  </Badge>
+                )
+              )}
+            </div>
           </CardHeader>
           <CardContent className="grid gap-4">
             <form onSubmit={generateDocument} className="grid gap-4">
@@ -224,10 +321,14 @@ const DocumentCreator = () => {
                   placeholder="Enter the topic for your document..."
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
+                  className="min-h-24 resize-none"
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="numPages">Number of Pages: {numPages}</Label>
+                <div className="flex justify-between items-center">
+                  <Label htmlFor="numPages">Number of Pages</Label>
+                  <span className="text-sm font-medium">{numPages}</span>
+                </div>
                 <Slider
                   id="numPages"
                   defaultValue={[numPages]}
@@ -235,19 +336,24 @@ const DocumentCreator = () => {
                   max={10}
                   step={1}
                   onValueChange={(value) => setNumPages(value[0])}
+                  className="py-2"
                 />
                 <p className="text-sm text-muted-foreground">
                   Adjust the number of pages for your document (1-10).
                 </p>
               </div>
-              <Button type="submit" disabled={isLoading}>
+              <Button 
+                type="submit" 
+                disabled={isLoading || (!isAuthenticated && userId !== null)} 
+                className="mt-2"
+              >
                 {isLoading ? (
                   <>
-                    Generating...
-                    <svg className="animate-spin ml-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <svg className="animate-spin mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
+                    Generating...
                   </>
                 ) : (
                   "Generate Document"
@@ -256,47 +362,58 @@ const DocumentCreator = () => {
             </form>
           </CardContent>
         </Card>
+        
         <Card className="w-full mt-4">
           <CardHeader>
-            <CardTitle>Generated Document</CardTitle>
+            <CardTitle className="flex items-center space-x-2">
+              <BookOpenIcon className="h-5 w-5 text-primary" />
+              <span>Generated Document</span>
+            </CardTitle>
             <CardDescription>Your document will appear here when ready.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
-            <AuthCheck allowTrial={true}>
-              {documentUrl ? (
-                <div className="space-y-4">
-                  <Alert>
-                    <AlertDescription className="flex flex-col gap-2">
-                      <p>Your document <strong>{filename}</strong> has been generated successfully!</p>
-                      <div className="flex items-center gap-2 text-primary">
-                        <Link2Icon size={16} />
-                        <a 
-                          href={documentUrl} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="hover:underline break-all"
-                        >
-                          {documentUrl}
-                        </a>
-                      </div>
-                    </AlertDescription>
-                  </Alert>
+            {documentUrl ? (
+              <div className="space-y-4">
+                <Alert className="bg-green-50 dark:bg-green-950/10 border-green-100 dark:border-green-900/30">
+                  <CheckCircle2Icon className="h-4 w-4 text-green-500" />
+                  <AlertTitle>Document Ready</AlertTitle>
+                  <AlertDescription className="flex flex-col gap-2">
+                    <p>Your document <strong>{filename}</strong> has been generated successfully!</p>
+                    <div className="flex items-center gap-2 text-primary">
+                      <Link2Icon size={16} />
+                      <a 
+                        href={documentUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="hover:underline break-all"
+                      >
+                        {documentUrl}
+                      </a>
+                    </div>
+                    <Button 
+                      onClick={downloadDocument} 
+                      className="mt-2 w-full sm:w-auto"
+                    >
+                      <FileIcon className="mr-2 h-4 w-4" />
+                      Download Document
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              </div>
+            ) : (
+              <div className="min-h-[200px] flex items-center justify-center border border-dashed rounded-md">
+                <div className="text-center p-6">
+                  <FileIcon className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-50" />
+                  <p className="text-muted-foreground">Your generated document will appear here</p>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    {isAuthenticated === false 
+                      ? "Please sign in to generate documents" 
+                      : "Enter a topic and click 'Generate Document'"}
+                  </p>
                 </div>
-              ) : (
-                <div className="min-h-[200px] flex items-center justify-center border border-dashed rounded-md">
-                  <p className="text-muted-foreground">Your generated document will appear here...</p>
-                </div>
-              )}
-            </AuthCheck>
+              </div>
+            )}
           </CardContent>
-          <CardFooter>
-            <Button 
-              onClick={downloadDocument} 
-              disabled={!documentUrl}
-            >
-              Download Document
-            </Button>
-          </CardFooter>
         </Card>
       </div>
       <SubscriptionModal 

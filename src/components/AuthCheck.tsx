@@ -26,6 +26,21 @@ const AuthCheck: React.FC<AuthCheckProps> = ({
       setIsAuthenticated(!!data.session);
     };
     checkAuth();
+
+    // Setup auth state change listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (event === 'SIGNED_OUT') {
+          setIsAuthenticated(false);
+        } else if (event === 'SIGNED_IN' && session) {
+          setIsAuthenticated(true);
+        }
+      }
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const handleSignIn = () => {

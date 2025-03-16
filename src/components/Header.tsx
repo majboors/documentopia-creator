@@ -1,13 +1,15 @@
 
 import React, { useEffect, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { UserCircle, Crown, ChevronDown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Badge } from '@/components/ui/badge';
+import { toast } from '@/hooks/use-toast';
 
 const Header: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
   
@@ -43,6 +45,33 @@ const Header: React.FC = () => {
       subscription.unsubscribe();
     };
   }, []);
+
+  const handleSignOut = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('Error signing out:', error);
+        toast({
+          title: "Sign Out Failed",
+          description: "There was an error signing out. Please try again.",
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: "Signed Out",
+          description: "You have been successfully signed out.",
+        });
+        navigate('/');
+      }
+    } catch (error) {
+      console.error('Unexpected error during sign out:', error);
+      toast({
+        title: "Sign Out Failed",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
 
   return (
     <header className="fixed w-full bg-background/80 backdrop-blur-md z-10 border-b">
@@ -91,6 +120,9 @@ const Header: React.FC = () => {
                   Dashboard
                 </Button>
               </Link>
+              <Button size="sm" variant="ghost" onClick={handleSignOut}>
+                Sign Out
+              </Button>
             </div>
           ) : (
             <Link to="/auth">

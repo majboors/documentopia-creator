@@ -1,24 +1,16 @@
 
 import * as React from "react";
-import { createContext, useContext, useState } from "react";
 
 const TOAST_REMOVE_DELAY = 1000;
 
-// Base toast type
 type ToasterToast = {
   id: string;
   title?: React.ReactNode;
   description?: React.ReactNode;
   action?: React.ReactElement;
   open: boolean;
-  onOpenChange?: (open: boolean) => void;
   variant?: "default" | "destructive";
 };
-
-type ToastActionElement = React.ReactElement<{
-  altText: string;
-  onClick: () => void;
-}>;
 
 const actionTypes = {
   ADD_TOAST: "ADD_TOAST",
@@ -76,7 +68,7 @@ const addToRemoveQueue = (toastId: string) => {
   toastTimeouts.set(toastId, timeout);
 };
 
-export const reducer = (state: State, action: Action): State => {
+const reducer = (state: State, action: Action): State => {
   switch (action.type) {
     case actionTypes.ADD_TOAST:
       return {
@@ -161,9 +153,6 @@ function toast({ ...props }: ToastOptions) {
       ...props,
       id,
       open: true,
-      onOpenChange: (open: boolean) => {
-        if (!open) dismiss();
-      },
     },
   });
 
@@ -175,7 +164,7 @@ function toast({ ...props }: ToastOptions) {
 }
 
 function useToast() {
-  const [state, setState] = useState<State>(memoryState);
+  const [state, setState] = React.useState<State>(memoryState);
 
   React.useEffect(() => {
     listeners.push(setState);
@@ -195,27 +184,18 @@ function useToast() {
   };
 }
 
-type ToastContextType = ReturnType<typeof useToast>;
-
-const ToastContext = createContext<ToastContextType | null>(null);
+const ToastContext = React.createContext<ReturnType<typeof useToast> | null>(null);
 
 function ToastProvider({ children }: { children: React.ReactNode }) {
-  const toastContext = useToast();
-
-  return (
-    <ToastContext.Provider value={toastContext}>
-      {children}
-    </ToastContext.Provider>
-  );
+  const value = useToast();
+  return <ToastContext.Provider value={value}>{children}</ToastContext.Provider>;
 }
 
 function useToastContext() {
-  const context = useContext(ToastContext);
-
-  if (context === null) {
+  const context = React.useContext(ToastContext);
+  if (!context) {
     throw new Error("useToast must be used within a ToastProvider");
   }
-
   return context;
 }
 

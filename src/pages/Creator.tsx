@@ -4,7 +4,7 @@ import Header from '@/components/Header';
 import DocumentCreator from '@/components/DocumentCreator';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
-import { toast } from '@/hooks/use-toast';
+import { toast } from '@/components/ui/use-toast';
 
 const Creator = () => {
   const location = useLocation();
@@ -12,7 +12,6 @@ const Creator = () => {
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   
-  // Check auth status on component mount
   useEffect(() => {
     let isMounted = true;
     let authCheckTimeout: NodeJS.Timeout | null = null;
@@ -21,7 +20,6 @@ const Creator = () => {
       try {
         console.log('Creator: Checking auth status');
         
-        // First check if we have a user in sessionStorage
         const storedUser = sessionStorage.getItem('supabase_auth_user');
         if (storedUser) {
           const parsedUser = JSON.parse(storedUser);
@@ -33,7 +31,6 @@ const Creator = () => {
           }
         }
 
-        // If not in sessionStorage, check with Supabase
         const { data, error } = await supabase.auth.getSession();
         
         if (error) {
@@ -52,13 +49,11 @@ const Creator = () => {
         if (!data.session) {
           console.log('No active session found in Creator page');
           if (isMounted) {
-            // Instead of immediately redirecting, set a flag and handle redirect after a timeout
             setIsCheckingAuth(false);
             setUserId(null);
           }
         } else if (isMounted) {
           console.log('User is authenticated in Creator page, ID:', data.session.user.id);
-          // Store user in sessionStorage for cross-page persistence
           sessionStorage.setItem('supabase_auth_user', JSON.stringify(data.session.user));
           setUserId(data.session.user.id);
           setIsCheckingAuth(false);
@@ -73,7 +68,6 @@ const Creator = () => {
 
     checkAuthStatus();
     
-    // Set a max timeout for the auth check to prevent infinite loading
     authCheckTimeout = setTimeout(() => {
       if (isMounted && isCheckingAuth) {
         console.log('Auth check timeout reached in Creator page');
@@ -81,7 +75,6 @@ const Creator = () => {
       }
     }, 2000);
 
-    // Set up auth state change listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         console.log('Creator: Auth state changed:', event);
@@ -90,13 +83,11 @@ const Creator = () => {
         
         if (event === 'SIGNED_IN' && session) {
           console.log('Creator: User signed in, ID:', session.user.id);
-          // Store user in sessionStorage for cross-page persistence
           sessionStorage.setItem('supabase_auth_user', JSON.stringify(session.user));
           setUserId(session.user.id);
           setIsCheckingAuth(false);
         } else if (event === 'SIGNED_OUT') {
           console.log('Creator: User signed out');
-          // Clear sessionStorage
           sessionStorage.removeItem('supabase_auth_user');
           setUserId(null);
           navigate('/auth', { state: { returnUrl: '/create' } });
@@ -113,16 +104,12 @@ const Creator = () => {
     };
   }, [navigate]);
 
-  // Effect to handle navigation if user is not authenticated
   useEffect(() => {
     if (!isCheckingAuth && !userId) {
-      // Only navigate if we've finished checking and there's no user
-      console.log('User not authenticated, redirecting to auth page');
       navigate('/auth', { state: { returnUrl: '/create' } });
     }
   }, [isCheckingAuth, userId, navigate]);
 
-  // Scroll to pricing section if the URL has #pricing
   useEffect(() => {
     if (location.hash === '#pricing') {
       setTimeout(() => {
@@ -145,8 +132,6 @@ const Creator = () => {
     );
   }
 
-  // If we get here, we've finished checking and the user is authenticated
-  // (otherwise they would have been redirected by the effect above)
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background/95 to-muted/30">
       <Header />

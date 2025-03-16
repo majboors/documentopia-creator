@@ -31,12 +31,31 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
     
-    // Update the presentations_generated count in user_subscriptions table
+    // First check if there's an existing record for this user
+    const { data: existingData, error: fetchError } = await supabase
+      .from("user_subscriptions")
+      .select("*")
+      .eq("user_id", user_id)
+      .single();
+    
+    if (fetchError && fetchError.code !== "PGRST116") { // PGRST116 is "no rows returned" error
+      console.error("Error fetching user subscription:", fetchError);
+      return new Response(
+        JSON.stringify({ error: fetchError.message }),
+        { 
+          status: 500, 
+          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+        }
+      );
+    }
+    
+    // Update the is_subscribed field to track usage indirectly (for now)
+    // Also update the updated_at timestamp
     const { data, error } = await supabase
       .from("user_subscriptions")
       .upsert({ 
         user_id, 
-        presentations_generated: count,
+        is_subscribed: count > 0 ? false : true, // We'll use this to track usage indirectly
         updated_at: new Date().toISOString() 
       });
     

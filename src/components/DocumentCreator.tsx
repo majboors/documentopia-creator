@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Section, Container, Heading, Text, Button, GlassCard } from './ui-components';
@@ -48,7 +47,6 @@ const DocumentCreator: React.FC = () => {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Check for payment status from URL parameters (after redirect)
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const paymentStatus = params.get('payment');
@@ -58,7 +56,6 @@ const DocumentCreator: React.FC = () => {
         title: "Payment Successful",
         description: "Your subscription has been activated. You now have unlimited access!",
       });
-      // Remove the query parameter to prevent showing the toast on refresh
       navigate('/create', { replace: true });
     } else if (paymentStatus === 'failed' || paymentStatus === 'error') {
       toast({
@@ -66,12 +63,10 @@ const DocumentCreator: React.FC = () => {
         description: "There was an issue processing your payment. Please try again.",
         variant: "destructive"
       });
-      // Remove the query parameter to prevent showing the toast on refresh
       navigate('/create', { replace: true });
     }
   }, [location.search, navigate]);
 
-  // Check authentication
   useEffect(() => {
     const checkAuth = async () => {
       try {
@@ -88,34 +83,28 @@ const DocumentCreator: React.FC = () => {
           email: session.user.email,
         });
         
-        // Get user's document usage count
-        if (session.user.id) {
-          try {
-            // Use user_subscriptions table to track document usage
-            const { data, error } = await supabase
-              .from('user_subscriptions')
-              .select('*')
-              .eq('user_id', session.user.id)
-              .single();
-            
-            if (error && error.code !== 'PGRST116') { // PGRST116 is "No rows returned" error
-              console.error('Error fetching usage count:', error);
-              setUsageCount(0);
-            } else {
-              // Set usage count if the data exists
-              if (data && typeof data.presentations_generated === 'number') {
-                setUsageCount(data.presentations_generated);
-              } else {
-                setUsageCount(0);
-              }
+        let documentCount = 0;
+        
+        try {
+          const { data, error } = await supabase
+            .from('user_subscriptions')
+            .select('*')
+            .eq('user_id', session.user.id)
+            .single();
+          
+          if (error && error.code !== 'PGRST116') {
+            console.error('Error fetching usage count:', error);
+          } else {
+            if (data && data.is_subscribed === false) {
+              documentCount = 1;
             }
-          } catch (error) {
-            console.error('Error fetching document usage:', error);
-            setUsageCount(0);
+            setUsageCount(documentCount);
           }
+        } catch (error) {
+          console.error('Error fetching document usage:', error);
+          setUsageCount(0);
         }
         
-        // Check subscription status
         const { data: subscriptionData, error: subscriptionError } = await supabase
           .from('subscriptions')
           .select('*')
@@ -199,12 +188,10 @@ const DocumentCreator: React.FC = () => {
         setActiveTab('preview');
         
         if (user.id) {
-          // Update usage count
           const newCount = usageCount + 1;
           setUsageCount(newCount);
           
           try {
-            // Call the edge function to update document usage
             const { error: updateError } = await supabase.functions.invoke('update-document-usage', {
               body: {
                 user_id: user.id,
@@ -256,7 +243,6 @@ const DocumentCreator: React.FC = () => {
     setIsProcessingPayment(true);
     
     try {
-      // Create the redirection URL with the user ID
       const redirectUrl = `${window.location.origin}/create?user_id=${user.id}`;
       
       const response = await fetch('https://pay.techrealm.pk/create-payment', {
@@ -265,7 +251,7 @@ const DocumentCreator: React.FC = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          amount: 5141, // 14 USD
+          amount: 5141,
           redirection_url: redirectUrl
         }),
       });

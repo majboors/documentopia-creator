@@ -31,6 +31,8 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
     
+    console.log(`Processing usage update for user: ${user_id}`);
+    
     // First check if there's an existing record for this user
     const { data: existingData, error: fetchError } = await supabase
       .from("user_subscriptions")
@@ -49,8 +51,18 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
     
+    // If user already used their free trial, return error
+    if (existingData?.free_trial_used && count > 0) {
+      return new Response(
+        JSON.stringify({ error: "Free trial already used", freeTrialUsed: true }),
+        { 
+          status: 403, 
+          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+        }
+      );
+    }
+    
     // Update the record tracking free trial usage
-    // Also update the updated_at timestamp
     const { data, error } = await supabase
       .from("user_subscriptions")
       .upsert({ 
@@ -71,8 +83,10 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
     
+    console.log(`Successfully updated usage for user: ${user_id}, free trial used: ${count > 0}`);
+    
     return new Response(
-      JSON.stringify({ success: true, data }),
+      JSON.stringify({ success: true, freeTrialUsed: count > 0 }),
       { 
         status: 200, 
         headers: { ...corsHeaders, "Content-Type": "application/json" } 

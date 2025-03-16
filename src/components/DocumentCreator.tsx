@@ -7,11 +7,10 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import AuthCheck from '@/components/AuthCheck';
 import { toast } from '@/hooks/use-toast';
 import { Toaster } from "@/components/ui/toaster";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Link2Icon, FileIcon, BookOpenIcon, AlertTriangleIcon, CheckCircle2Icon } from "lucide-react";
+import { Link2Icon, FileIcon, BookOpenIcon, AlertTriangleIcon, CheckCircle2Icon, Loader2Icon } from "lucide-react";
 import { supabase } from '@/integrations/supabase/client';
 import SubscriptionModal from '@/components/SubscriptionModal';
 import { Badge } from '@/components/ui-components';
@@ -37,10 +36,14 @@ const DocumentCreator = () => {
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [checkingAuthStatus, setCheckingAuthStatus] = useState(true);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   // Check user subscription status on component mount
   useEffect(() => {
     const checkUserStatus = async () => {
+      setCheckingAuthStatus(true);
+      
       // Get the current user
       const { data: { session } } = await supabase.auth.getSession();
       
@@ -64,10 +67,7 @@ const DocumentCreator = () => {
           
           if (error) {
             console.error('Error fetching subscription status:', error);
-            return;
-          }
-          
-          if (data) {
+          } else if (data) {
             setFreeTrialUsed(data.free_trial_used || false);
             setIsSubscribed(data.is_subscribed || false);
             
@@ -82,13 +82,60 @@ const DocumentCreator = () => {
         setUserId(null);
         setIsAuthenticated(false);
       }
+      
+      setCheckingAuthStatus(false);
     };
     
     checkUserStatus();
+    
+    // Setup auth state change listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'SIGNED_OUT') {
+          setIsAuthenticated(false);
+          setUserId(null);
+          setFreeTrialUsed(false);
+          setIsSubscribed(false);
+        } else if (event === 'SIGNED_IN' && session) {
+          setIsAuthenticated(true);
+          setUserId(session.user.id);
+          
+          // Check subscription status after sign in
+          try {
+            const { data, error } = await supabase
+              .from('user_subscriptions')
+              .select('free_trial_used, is_subscribed')
+              .eq('user_id', session.user.id)
+              .maybeSingle();
+            
+            if (error) {
+              console.error('Error fetching subscription status:', error);
+            } else if (data) {
+              setFreeTrialUsed(data.free_trial_used || false);
+              setIsSubscribed(data.is_subscribed || false);
+              localStorage.setItem(`${TRIAL_USED_KEY}_${session.user.id}`, data.free_trial_used ? 'true' : 'false');
+            }
+          } catch (error) {
+            console.error('Error checking subscription after sign in:', error);
+          }
+        }
+      }
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
+  // Check if the user has permission to generate documents
+  const canGenerateDocument = () => {
+    if (!isAuthenticated) return false;
+    if (isSubscribed) return true;
+    return !freeTrialUsed;
+  };
+
   const updateTrialUsage = async () => {
-    if (!userId) return;
+    if (!userId) return false;
     
     try {
       // Call Supabase Edge Function to update user subscription
@@ -98,15 +145,17 @@ const DocumentCreator = () => {
       
       if (error) {
         console.error('Error updating trial usage:', error);
-        return;
+        return false;
       }
       
       // Update local state and localStorage
       setFreeTrialUsed(true);
       localStorage.setItem(`${TRIAL_USED_KEY}_${userId}`, 'true');
       
+      return true;
     } catch (error) {
       console.error('Error in updateTrialUsage:', error);
+      return false;
     }
   };
 
@@ -131,6 +180,16 @@ const DocumentCreator = () => {
       return;
     }
 
+    // Check if user is already generating a document
+    if (isGenerating) {
+      toast({
+        title: "Already in progress",
+        description: "Please wait for the current document to finish generating.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Check if user has used their free trial and is not subscribed
     if (freeTrialUsed && !isSubscribed && userId) {
       setShowSubscriptionModal(true);
@@ -138,10 +197,21 @@ const DocumentCreator = () => {
     }
 
     setIsLoading(true);
+    setIsGenerating(true);
     setDocumentUrl(null);
     setFilename(null);
 
     try {
+      // First update trial usage in database if this is the first time
+      // This prevents users from generating multiple documents in free trial
+      if (!isSubscribed && !freeTrialUsed && userId) {
+        const updateSuccess = await updateTrialUsage();
+        
+        if (!updateSuccess) {
+          throw new Error("Failed to update trial usage. Please try again.");
+        }
+      }
+      
       const response = await fetch('https://docx.techrealm.online/generate-document', {
         method: 'POST',
         headers: {
@@ -169,11 +239,6 @@ const DocumentCreator = () => {
         setDocumentUrl(formattedUrl);
         setFilename(data.filename);
         
-        // Update trial usage in database if this is the first time
-        if (!freeTrialUsed && userId) {
-          await updateTrialUsage();
-        }
-        
         toast({
           title: "Document Generated",
           description: "Your document has been successfully generated.",
@@ -188,8 +253,20 @@ const DocumentCreator = () => {
         description: error.message || "Something went wrong. Please try again.",
         variant: "destructive",
       });
+      
+      // If document generation fails, revert the trial usage status
+      if (!isSubscribed && userId) {
+        // We won't automatically revert the trial usage here to prevent abuse
+        // Instead, inform the user about what happened
+        toast({
+          title: "Free Trial Status",
+          description: "Your free trial has been marked as used. Contact support if you need assistance.",
+          variant: "default",
+        });
+      }
     } finally {
       setIsLoading(false);
+      setIsGenerating(false);
     }
   };
 
@@ -223,6 +300,18 @@ const DocumentCreator = () => {
 
   // Show trial status
   const renderTrialStatus = () => {
+    if (checkingAuthStatus) {
+      return (
+        <Alert variant="default" className="mb-4 bg-muted/30 border-muted/40">
+          <Loader2Icon className="h-4 w-4 animate-spin text-muted-foreground" />
+          <AlertTitle>Checking status...</AlertTitle>
+          <AlertDescription>
+            Verifying your account status.
+          </AlertDescription>
+        </Alert>
+      );
+    }
+    
     if (!isAuthenticated) {
       return (
         <Alert variant="default" className="mb-4 bg-primary/10 border-primary/20">
@@ -255,12 +344,12 @@ const DocumentCreator = () => {
         <Alert variant="default" className="mb-4 bg-orange-500/10 border-orange-500/20">
           <AlertTriangleIcon className="h-4 w-4 text-orange-500" />
           <AlertTitle>Free Trial Used</AlertTitle>
-          <AlertDescription>
-            You've used your free document generation. Upgrade for unlimited access.
+          <AlertDescription className="flex flex-col">
+            <span>You've used your free document generation. Upgrade for unlimited access.</span>
             <Button 
               onClick={() => setShowSubscriptionModal(true)} 
               size="sm" 
-              className="mt-2 bg-orange-500 hover:bg-orange-600"
+              className="mt-2 bg-orange-500 hover:bg-orange-600 w-full sm:w-auto"
             >
               Upgrade Now
             </Button>
@@ -281,12 +370,12 @@ const DocumentCreator = () => {
   };
 
   return (
-    <div className="container relative py-8">
+    <div className="container relative py-8 animate-in fade-in slide-in-from-bottom-5 duration-500">
       <div className="mx-auto w-full max-w-2xl lg:max-w-4xl">
         {renderTrialStatus()}
         
-        <Card className="w-full">
-          <CardHeader>
+        <Card className="w-full shadow-md mb-6">
+          <CardHeader className="border-b bg-card/50">
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="flex items-center space-x-2">
@@ -312,22 +401,28 @@ const DocumentCreator = () => {
               )}
             </div>
           </CardHeader>
-          <CardContent className="grid gap-4">
+          <CardContent className="grid gap-4 pt-6">
             <form onSubmit={generateDocument} className="grid gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="prompt">Topic</Label>
+                <Label htmlFor="prompt" className="flex items-center justify-between">
+                  <span>Topic</span>
+                  <span className="text-xs text-muted-foreground">
+                    {prompt.length > 0 ? `${prompt.length} characters` : 'Enter topic details'}
+                  </span>
+                </Label>
                 <Textarea
                   id="prompt"
                   placeholder="Enter the topic for your document..."
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  className="min-h-24 resize-none"
+                  disabled={isGenerating}
+                  className="min-h-24 resize-none focus:ring-1 focus:ring-primary/50"
                 />
               </div>
               <div className="grid gap-2">
                 <div className="flex justify-between items-center">
                   <Label htmlFor="numPages">Number of Pages</Label>
-                  <span className="text-sm font-medium">{numPages}</span>
+                  <span className="text-sm font-medium bg-primary/10 px-2 py-0.5 rounded-md">{numPages}</span>
                 </div>
                 <Slider
                   id="numPages"
@@ -336,63 +431,72 @@ const DocumentCreator = () => {
                   max={10}
                   step={1}
                   onValueChange={(value) => setNumPages(value[0])}
+                  disabled={isGenerating}
                   className="py-2"
                 />
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   Adjust the number of pages for your document (1-10).
                 </p>
               </div>
               <Button 
                 type="submit" 
-                disabled={isLoading || (!isAuthenticated && userId !== null)} 
-                className="mt-2"
+                disabled={isLoading || isGenerating || !isAuthenticated || (freeTrialUsed && !isSubscribed)}
+                className="mt-2 relative overflow-hidden group"
               >
                 {isLoading ? (
-                  <>
-                    <svg className="animate-spin mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
+                  <span className="flex items-center justify-center">
+                    <Loader2Icon className="animate-spin mr-2 h-4 w-4" />
                     Generating...
-                  </>
+                  </span>
+                ) : freeTrialUsed && !isSubscribed ? (
+                  <span className="flex items-center justify-center">
+                    <AlertTriangleIcon className="mr-2 h-4 w-4" />
+                    Upgrade to Generate
+                  </span>
                 ) : (
-                  "Generate Document"
+                  <span className="flex items-center justify-center">
+                    <FileIcon className="mr-2 h-4 w-4" />
+                    Generate Document
+                  </span>
+                )}
+                {!isLoading && canGenerateDocument() && (
+                  <span className="absolute inset-0 w-0 bg-white/20 transition-all duration-300 group-hover:w-full"></span>
                 )}
               </Button>
             </form>
           </CardContent>
         </Card>
         
-        <Card className="w-full mt-4">
-          <CardHeader>
+        <Card className="w-full shadow-md overflow-hidden">
+          <CardHeader className="border-b bg-card/50">
             <CardTitle className="flex items-center space-x-2">
               <BookOpenIcon className="h-5 w-5 text-primary" />
               <span>Generated Document</span>
             </CardTitle>
             <CardDescription>Your document will appear here when ready.</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4">
+          <CardContent className="p-6">
             {documentUrl ? (
-              <div className="space-y-4">
+              <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
                 <Alert className="bg-green-50 dark:bg-green-950/10 border-green-100 dark:border-green-900/30">
                   <CheckCircle2Icon className="h-4 w-4 text-green-500" />
                   <AlertTitle>Document Ready</AlertTitle>
                   <AlertDescription className="flex flex-col gap-2">
                     <p>Your document <strong>{filename}</strong> has been generated successfully!</p>
-                    <div className="flex items-center gap-2 text-primary">
-                      <Link2Icon size={16} />
+                    <div className="flex items-center gap-2 text-primary mt-1 bg-primary/5 p-2 rounded-md">
+                      <Link2Icon size={16} className="shrink-0" />
                       <a 
                         href={documentUrl} 
                         target="_blank" 
                         rel="noopener noreferrer"
-                        className="hover:underline break-all"
+                        className="hover:underline text-sm break-all"
                       >
                         {documentUrl}
                       </a>
                     </div>
                     <Button 
                       onClick={downloadDocument} 
-                      className="mt-2 w-full sm:w-auto"
+                      className="mt-4 w-full sm:w-auto bg-green-600 hover:bg-green-700 transition-colors"
                     >
                       <FileIcon className="mr-2 h-4 w-4" />
                       Download Document
@@ -401,19 +505,40 @@ const DocumentCreator = () => {
                 </Alert>
               </div>
             ) : (
-              <div className="min-h-[200px] flex items-center justify-center border border-dashed rounded-md">
+              <div className="min-h-[200px] flex items-center justify-center border border-dashed rounded-md bg-muted/5">
                 <div className="text-center p-6">
                   <FileIcon className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-50" />
                   <p className="text-muted-foreground">Your generated document will appear here</p>
                   <p className="text-sm text-muted-foreground mt-2">
                     {isAuthenticated === false 
                       ? "Please sign in to generate documents" 
-                      : "Enter a topic and click 'Generate Document'"}
+                      : freeTrialUsed && !isSubscribed
+                        ? "Upgrade to premium to generate more documents"
+                        : "Enter a topic and click 'Generate Document'"}
                   </p>
                 </div>
               </div>
             )}
           </CardContent>
+          {isAuthenticated && !isSubscribed && (
+            <CardFooter className="bg-muted/10 border-t px-6 py-4">
+              <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-4">
+                <p className="text-sm text-muted-foreground">
+                  {freeTrialUsed 
+                    ? "You've used your free trial. Upgrade to premium for unlimited documents." 
+                    : "You have 1 free document generation with your account."}
+                </p>
+                <Button 
+                  onClick={() => setShowSubscriptionModal(true)}
+                  size="sm" 
+                  variant={freeTrialUsed ? "default" : "outline"}
+                  className={freeTrialUsed ? "bg-primary hover:bg-primary/90" : ""}
+                >
+                  Upgrade to Premium
+                </Button>
+              </div>
+            </CardFooter>
+          )}
         </Card>
       </div>
       <SubscriptionModal 

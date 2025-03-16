@@ -40,25 +40,22 @@ enabled = false
 [functions]
 enabled = true
 
-[functions.serve]
-port = 54321
-
-[[functions.serve.functions]]
+[[functions.function]]
 name = "verify-payment"
 verify_jwt = false
 pattern = "verify-payment"
 
-[[functions.serve.functions]]
+[[functions.function]]
 name = "payment-callback"
 verify_jwt = false
 pattern = "payment-callback"
 
-[[functions.serve.functions]]
+[[functions.function]]
 name = "update-document-usage"
 verify_jwt = false
 pattern = "update-document-usage"
 
-[[functions.serve.functions]]
+[[functions.function]]
 name = "payment-fallback"
 verify_jwt = false
 pattern = "payment-fallback"

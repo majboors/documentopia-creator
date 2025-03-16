@@ -7,8 +7,13 @@ import DocumentCard from '@/components/DocumentCard';
 import { Section, Container, Heading, Text, Button } from '@/components/ui-components';
 import { ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import AuthCheck from '@/components/AuthCheck';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/hooks/use-toast';
 
 const Index = () => {
+  const navigate = useNavigate();
   const exampleDocs = [
     {
       title: 'Project Proposal',
@@ -26,6 +31,22 @@ const Index = () => {
       date: 'Template'
     }
   ];
+
+  const handleCreateClick = async (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    
+    const { data } = await supabase.auth.getSession();
+    
+    if (data.session) {
+      navigate('/create');
+    } else {
+      toast({
+        title: "Authentication Required",
+        description: "Please sign in to create documents",
+      });
+      navigate('/auth', { state: { returnUrl: '/create' } });
+    }
+  };
 
   return (
     <div className="min-h-screen">
@@ -45,24 +66,30 @@ const Index = () => {
           
           <div className="grid md:grid-cols-3 gap-6 mb-12">
             {exampleDocs.map((doc, i) => (
-              <Link to="/create" key={i}>
-                <DocumentCard
-                  title={doc.title}
-                  excerpt={doc.excerpt}
-                  date={doc.date}
-                  className="animate-fade-in h-full"
-                  style={{ animationDelay: `${i * 100}ms` }}
-                />
-              </Link>
+              <div key={i}>
+                <AuthCheck message="Sign in to use templates">
+                  <Link to="/create">
+                    <DocumentCard
+                      title={doc.title}
+                      excerpt={doc.excerpt}
+                      date={doc.date}
+                      className="animate-fade-in h-full"
+                      style={{ animationDelay: `${i * 100}ms` }}
+                    />
+                  </Link>
+                </AuthCheck>
+              </div>
             ))}
           </div>
           
           <div className="text-center">
-            <Button asChild>
-              <Link to="/create">
-                Create Your Document <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
+            <AuthCheck message="Sign in to create documents">
+              <Button asChild>
+                <Link to="/create">
+                  Create Your Document <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </AuthCheck>
           </div>
         </Container>
       </Section>
@@ -75,11 +102,13 @@ const Index = () => {
               Start creating professional documents with AI assistance today.
               Save time and get better results.
             </Text.Lead>
-            <Button size="lg" asChild>
-              <Link to="/create">
-                Get Started <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
+            <AuthCheck message="Sign in to get started">
+              <Button size="lg" asChild>
+                <Link to="/create">
+                  Get Started <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </AuthCheck>
           </div>
         </Container>
       </Section>

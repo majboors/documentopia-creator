@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -8,9 +7,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/hooks/use-toast';
 import { Mail, Key, LogIn, UserPlus, Loader2 } from 'lucide-react';
 
+interface LocationState {
+  returnUrl?: string;
+}
+
 const Auth = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const state = location.state as LocationState;
+  const returnUrl = state?.returnUrl || '/create';
+  
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -21,7 +27,7 @@ const Auth = () => {
     const checkSession = async () => {
       const { data } = await supabase.auth.getSession();
       if (data.session) {
-        navigate('/create');
+        navigate(returnUrl);
       }
     };
     
@@ -31,7 +37,7 @@ const Auth = () => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (session) {
-          navigate('/create');
+          navigate(returnUrl);
         }
       }
     );
@@ -39,7 +45,7 @@ const Auth = () => {
     return () => {
       subscription.unsubscribe();
     };
-  }, [navigate]);
+  }, [navigate, returnUrl]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();

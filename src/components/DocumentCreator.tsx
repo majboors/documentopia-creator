@@ -38,6 +38,7 @@ const DocumentCreator = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [lastAuthCheck, setLastAuthCheck] = useState<number>(0);
   const [authRetryCount, setAuthRetryCount] = useState(0);
+  const [preventRedirect, setPreventRedirect] = useState(false);
 
   const checkUserSession = useCallback(async () => {
     try {
@@ -220,6 +221,8 @@ const DocumentCreator = () => {
         if (session && event === 'SIGNED_IN') {
           console.log('User signed in or session refreshed:', session.user.id);
           sessionStorage.setItem('supabase_auth_user', JSON.stringify(session.user));
+          setIsAuthenticated(true);
+          setUserId(session.user.id);
         }
         
         if (event === 'SIGNED_OUT') {
@@ -295,14 +298,35 @@ const DocumentCreator = () => {
     e.preventDefault();
 
     if (!isAuthenticated) {
+      if (preventRedirect) {
+        toast({
+          title: "Authentication Required",
+          description: "Please sign in to generate documents.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      setPreventRedirect(true);
+      
+      sessionStorage.setItem('document_creator_state', JSON.stringify({
+        prompt,
+        numPages
+      }));
+      
       toast({
         title: "Authentication Required",
         description: "Please sign in to generate documents.",
         variant: "destructive",
       });
-      navigate('/auth', { state: { returnUrl: '/create' } });
+      
+      setTimeout(() => {
+        navigate('/auth', { state: { returnUrl: '/create' } });
+      }, 300);
       return;
     }
+
+    setPreventRedirect(false);
 
     if (!prompt) {
       toast({
@@ -503,6 +527,22 @@ const DocumentCreator = () => {
       return () => clearTimeout(timer);
     }
   }, [checkingAuthStatus, checkAuthAndSubscription]);
+
+  useEffect(() => {
+    if (isAuthenticated && !checkingAuthStatus) {
+      const savedState = sessionStorage.getItem('document_creator_state');
+      if (savedState) {
+        try {
+          const { prompt: savedPrompt, numPages: savedNumPages } = JSON.parse(savedState);
+          setPrompt(savedPrompt || '');
+          setNumPages(savedNumPages || 3);
+          sessionStorage.removeItem('document_creator_state');
+        } catch (e) {
+          console.error('Failed to restore document creator state:', e);
+        }
+      }
+    }
+  }, [isAuthenticated, checkingAuthStatus]);
 
   return (
     <div className="container relative py-8 animate-in fade-in slide-in-from-bottom-5 duration-500">

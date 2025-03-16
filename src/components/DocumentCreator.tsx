@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Textarea } from "@/components/ui/textarea"
@@ -38,11 +37,28 @@ const DocumentCreator = () => {
   const [checkingAuthStatus, setCheckingAuthStatus] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [lastAuthCheck, setLastAuthCheck] = useState<number>(0);
+  const [authRetryCount, setAuthRetryCount] = useState(0);
 
-  // Handle session check with useCallback to avoid recreation on each render
   const checkUserSession = useCallback(async () => {
     try {
       console.log('Checking user session...');
+      
+      const storedUser = sessionStorage.getItem('supabase_auth_user');
+      if (storedUser) {
+        try {
+          const parsedUser = JSON.parse(storedUser);
+          console.log('Found stored user session:', parsedUser.id);
+          return { 
+            session: { 
+              user: parsedUser 
+            } 
+          };
+        } catch (e) {
+          console.error('Error parsing stored user session:', e);
+          sessionStorage.removeItem('supabase_auth_user');
+        }
+      }
+      
       const { data, error } = await supabase.auth.getSession();
       
       if (error) {
@@ -50,14 +66,17 @@ const DocumentCreator = () => {
         throw error;
       }
       
-      return data.session;
+      if (data.session?.user) {
+        sessionStorage.setItem('supabase_auth_user', JSON.stringify(data.session.user));
+      }
+      
+      return data;
     } catch (error) {
       console.error('Failed to check session:', error);
       return null;
     }
   }, []);
 
-  // Fetch subscription data once we have a user ID
   const fetchSubscriptionData = useCallback(async (uid: string) => {
     try {
       console.log('Fetching subscription data for user:', uid);
@@ -81,7 +100,6 @@ const DocumentCreator = () => {
     }
   }, []);
 
-  // Create new subscription record if none exists
   const createSubscriptionRecord = useCallback(async (uid: string) => {
     try {
       console.log('Creating new user subscription record for user:', uid);
@@ -106,9 +124,7 @@ const DocumentCreator = () => {
     }
   }, []);
 
-  // Main authentication check function
   const checkAuthAndSubscription = useCallback(async () => {
-    // Avoid multiple rapid checks
     const now = Date.now();
     if (now - lastAuthCheck < 1000 && lastAuthCheck > 0) {
       console.log('Skipping auth check - too soon since last check');
@@ -119,11 +135,18 @@ const DocumentCreator = () => {
     setCheckingAuthStatus(true);
     
     try {
-      // Check session first
-      const session = await checkUserSession();
+      const sessionData = await checkUserSession();
+      const session = sessionData?.session;
       
       if (!session) {
         console.log('No active session found');
+        if (authRetryCount < 3) {
+          console.log(`Auth retry attempt ${authRetryCount + 1}`);
+          setAuthRetryCount(prev => prev + 1);
+          setTimeout(() => checkAuthAndSubscription(), 500);
+          return;
+        }
+        
         setIsAuthenticated(false);
         setUserId(null);
         setFreeTrialUsed(false);
@@ -135,43 +158,36 @@ const DocumentCreator = () => {
       const uid = session.user.id;
       console.log('User is authenticated, user ID:', uid);
       
-      // Update authentication state
       setIsAuthenticated(true);
       setUserId(uid);
+      setAuthRetryCount(0);
       
-      // Get subscription data
       const subData = await fetchSubscriptionData(uid);
       
       if (subData) {
-        // We have subscription data, update state
         setFreeTrialUsed(subData.free_trial_used || false);
         setIsSubscribed(subData.is_subscribed || false);
         localStorage.setItem(`${TRIAL_USED_KEY}_${uid}`, subData.free_trial_used ? 'true' : 'false');
       } else {
-        // No subscription data, try to create a record
         const created = await createSubscriptionRecord(uid);
         
         if (created) {
-          // Successfully created a new record, set initial states
           setFreeTrialUsed(false);
           setIsSubscribed(false);
           localStorage.setItem(`${TRIAL_USED_KEY}_${uid}`, 'false');
         } else {
-          // Fall back to localStorage if we can't create a record
           const localTrialUsed = localStorage.getItem(`${TRIAL_USED_KEY}_${uid}`);
           setFreeTrialUsed(localTrialUsed === 'true');
         }
       }
     } catch (error) {
       console.error('Error in checkAuthAndSubscription:', error);
-      // On error, default to unauthenticated
       setIsAuthenticated(false);
     } finally {
       setCheckingAuthStatus(false);
     }
-  }, [checkUserSession, fetchSubscriptionData, createSubscriptionRecord, lastAuthCheck]);
+  }, [checkUserSession, fetchSubscriptionData, createSubscriptionRecord, lastAuthCheck, authRetryCount]);
 
-  // Effect to check auth status on mount and after dependency changes
   useEffect(() => {
     let isMounted = true;
     let authCheckTimeout: NodeJS.Timeout | null = null;
@@ -179,7 +195,6 @@ const DocumentCreator = () => {
     const initialCheck = async () => {
       await checkAuthAndSubscription();
       
-      // Set a shorter timeout to clear checking state if it gets stuck
       if (isMounted) {
         authCheckTimeout = setTimeout(() => {
           if (isMounted && checkingAuthStatus) {
@@ -190,18 +205,22 @@ const DocumentCreator = () => {
               setIsAuthenticated(false);
             }
           }
-        }, 2000); // Shorter timeout
+        }, 1500);
       }
     };
     
     initialCheck();
     
-    // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('Auth state changed:', event, session ? 'with session' : 'no session');
         
         if (!isMounted) return;
+        
+        if (session && event === 'SIGNED_IN') {
+          console.log('User signed in or session refreshed:', session.user.id);
+          sessionStorage.setItem('supabase_auth_user', JSON.stringify(session.user));
+        }
         
         if (event === 'SIGNED_OUT') {
           setIsAuthenticated(false);
@@ -209,6 +228,7 @@ const DocumentCreator = () => {
           setFreeTrialUsed(false);
           setIsSubscribed(false);
           setCheckingAuthStatus(false);
+          sessionStorage.removeItem('supabase_auth_user');
         } else if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') && session) {
           await checkAuthAndSubscription();
         }
@@ -238,7 +258,6 @@ const DocumentCreator = () => {
       localStorage.setItem(`${TRIAL_USED_KEY}_${userId}`, 'true');
       
       try {
-        // Update local database first
         const { error: updateError } = await supabase
           .from('user_subscriptions')
           .update({ free_trial_used: true, updated_at: new Date().toISOString() })
@@ -251,7 +270,6 @@ const DocumentCreator = () => {
         console.error('Database error when updating trial usage:', dbError);
       }
       
-      // Also call the function to ensure serverless logic executes
       try {
         const { data, error } = await supabase.functions.invoke('update-document-usage', {
           body: { user_id: userId, count: 1 }
@@ -259,13 +277,11 @@ const DocumentCreator = () => {
         
         if (error) {
           console.error('Error invoking update-document-usage function:', error);
-          // Continue anyway since we've already updated local state
         } else {
           console.log('Trial usage updated successfully via function:', data);
         }
       } catch (fnError) {
         console.error('Function error when updating trial usage:', fnError);
-        // Continue anyway since we've already updated local state
       }
       
       return true;
@@ -403,6 +419,7 @@ const DocumentCreator = () => {
   };
 
   const handleSignIn = () => {
+    localStorage.setItem('auth_redirect_url', '/create');
     navigate('/auth', { state: { returnUrl: '/create' } });
   };
 
@@ -476,13 +493,12 @@ const DocumentCreator = () => {
     );
   };
 
-  // If auth check is taking too long, attempt a retry
   useEffect(() => {
     if (checkingAuthStatus) {
       const timer = setTimeout(() => {
         console.log('Auth check is taking too long, attempting retry');
         checkAuthAndSubscription();
-      }, 2500);
+      }, 1500);
       
       return () => clearTimeout(timer);
     }

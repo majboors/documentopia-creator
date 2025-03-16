@@ -12,6 +12,7 @@ const Creator = () => {
   const navigate = useNavigate();
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
+  const [authCheckAttempts, setAuthCheckAttempts] = useState(0);
 
   // Check auth status on component mount
   useEffect(() => {
@@ -21,6 +22,18 @@ const Creator = () => {
     const checkAuthStatus = async () => {
       try {
         console.log('Creator: Checking auth status');
+        
+        // First check if we have a user in sessionStorage
+        const storedUser = sessionStorage.getItem('supabase_auth_user');
+        if (storedUser) {
+          const parsedUser = JSON.parse(storedUser);
+          console.log('Found stored user in session storage:', parsedUser.id);
+          if (isMounted) {
+            setUserId(parsedUser.id);
+            setIsCheckingAuth(false);
+            return;
+          }
+        }
         
         // Check if there's a redirect URL in localStorage (set by Auth.tsx)
         const redirectUrl = localStorage.getItem('auth_redirect_url');
@@ -47,10 +60,18 @@ const Creator = () => {
         if (!data.session) {
           console.log('No active session found, redirecting to auth page');
           if (isMounted) {
-            navigate('/auth', { state: { returnUrl: '/create' } });
+            if (authCheckAttempts < 2) {
+              setAuthCheckAttempts(prev => prev + 1);
+              console.log(`Auth check attempt ${authCheckAttempts + 1} failed, retrying...`);
+              setTimeout(checkAuthStatus, 500);
+            } else {
+              navigate('/auth', { state: { returnUrl: '/create' } });
+            }
           }
         } else if (isMounted) {
           console.log('User is authenticated in Creator page, ID:', data.session.user.id);
+          // Store user in sessionStorage for cross-page persistence
+          sessionStorage.setItem('supabase_auth_user', JSON.stringify(data.session.user));
           setUserId(data.session.user.id);
           setIsCheckingAuth(false);
         }
@@ -74,7 +95,7 @@ const Creator = () => {
           navigate('/auth', { state: { returnUrl: '/create' } });
         }
       }
-    }, 3000);
+    }, 2000); // Reduced from 3000ms for faster response
 
     // Set up auth state change listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -85,10 +106,14 @@ const Creator = () => {
         
         if (event === 'SIGNED_IN' && session) {
           console.log('Creator: User signed in, ID:', session.user.id);
+          // Store user in sessionStorage for cross-page persistence
+          sessionStorage.setItem('supabase_auth_user', JSON.stringify(session.user));
           setUserId(session.user.id);
           setIsCheckingAuth(false);
         } else if (event === 'SIGNED_OUT') {
           console.log('Creator: User signed out');
+          // Clear sessionStorage
+          sessionStorage.removeItem('supabase_auth_user');
           setUserId(null);
           navigate('/auth', { state: { returnUrl: '/create' } });
         }
@@ -100,7 +125,7 @@ const Creator = () => {
       clearTimeout(authTimeout);
       subscription.unsubscribe();
     };
-  }, [navigate]);
+  }, [navigate, authCheckAttempts]);
 
   // Scroll to pricing section if the URL has #pricing
   useEffect(() => {

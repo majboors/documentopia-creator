@@ -47,6 +47,9 @@ const Auth = () => {
         if (data.session && isMounted) {
           console.log('Auth: User is already logged in, redirecting to:', returnUrl);
           
+          // Store session data in sessionStorage to ensure it's accessible across page refreshes
+          sessionStorage.setItem('supabase_auth_user', JSON.stringify(data.session.user));
+          
           // Store the return URL in localStorage for post-redirect use
           localStorage.setItem('auth_redirect_url', returnUrl);
           
@@ -69,7 +72,7 @@ const Auth = () => {
         console.log('Session check timeout reached in Auth');
         setCheckingSession(false);
       }
-    }, 1500); // Reduced further to 1.5s
+    }, 1000); // Reduced further to 1 second
     
     checkSession();
     
@@ -81,6 +84,9 @@ const Auth = () => {
         
         if (session && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION')) {
           console.log('Auth: User signed in, redirecting to:', returnUrl);
+          
+          // Store session data for cross-page persistence
+          sessionStorage.setItem('supabase_auth_user', JSON.stringify(session.user));
           
           // For a more reliable redirect after authentication
           if (event === 'SIGNED_IN') {
@@ -132,6 +138,9 @@ const Auth = () => {
       
       console.log('Auth: Sign in successful:', data.user?.id);
       
+      // Store session data for cross-page persistence
+      sessionStorage.setItem('supabase_auth_user', JSON.stringify(data.user));
+      
       toast({
         title: "Welcome back!",
         description: "You have successfully signed in.",
@@ -178,6 +187,11 @@ const Auth = () => {
       if (error) throw error;
       
       console.log('Auth: Sign up successful:', data);
+      
+      // Store session data for cross-page persistence
+      if (data.user) {
+        sessionStorage.setItem('supabase_auth_user', JSON.stringify(data.user));
+      }
       
       if (data.session) {
         toast({

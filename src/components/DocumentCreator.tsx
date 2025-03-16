@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Textarea } from "@/components/ui/textarea"
@@ -39,6 +40,7 @@ const DocumentCreator = () => {
   const [lastAuthCheck, setLastAuthCheck] = useState<number>(0);
   const [authRetryCount, setAuthRetryCount] = useState(0);
   const [preventRedirect, setPreventRedirect] = useState(false);
+  const [trialStatusChecked, setTrialStatusChecked] = useState(false);
 
   const checkUserSession = useCallback(async () => {
     try {
@@ -82,6 +84,7 @@ const DocumentCreator = () => {
     try {
       console.log('Fetching subscription data for user:', uid);
       
+      // First check our direct database record
       const { data, error } = await supabase
         .from('user_subscriptions')
         .select('free_trial_used, is_subscribed')
@@ -89,11 +92,37 @@ const DocumentCreator = () => {
         .maybeSingle();
       
       if (error) {
-        console.error('Error fetching subscription status:', error);
-        return null;
+        console.error('Error fetching subscription status from database:', error);
+        
+        // If direct DB check fails, call our edge function as a backup
+        try {
+          const { data: functionData, error: functionError } = await supabase.functions.invoke('update-document-usage', {
+            body: { user_id: uid, count: 0 } // Send count: 0 to just check status without updating
+          });
+          
+          if (functionError) {
+            console.error('Error checking trial status via function:', functionError);
+            return null;
+          }
+          
+          console.log('Received trial status from function:', functionData);
+          
+          // If function indicates trial is used, return that info
+          if (functionData.trial_used) {
+            return { 
+              free_trial_used: true, 
+              is_subscribed: false 
+            };
+          }
+          
+          return null;
+        } catch (fnError) {
+          console.error('Function error when checking trial status:', fnError);
+          return null;
+        }
       }
       
-      console.log('Subscription data:', data);
+      console.log('Subscription data from database:', data);
       return data;
     } catch (error) {
       console.error('Error in fetchSubscriptionData:', error);
@@ -125,9 +154,9 @@ const DocumentCreator = () => {
     }
   }, []);
 
-  const checkAuthAndSubscription = useCallback(async () => {
+  const checkAuthAndSubscription = useCallback(async (force = false) => {
     const now = Date.now();
-    if (now - lastAuthCheck < 1000 && lastAuthCheck > 0) {
+    if (!force && now - lastAuthCheck < 1000 && lastAuthCheck > 0) {
       console.log('Skipping auth check - too soon since last check');
       return;
     }
@@ -163,12 +192,14 @@ const DocumentCreator = () => {
       setUserId(uid);
       setAuthRetryCount(0);
       
+      // Always check subscription data when available - this ensures accurate state
       const subData = await fetchSubscriptionData(uid);
       
       if (subData) {
         setFreeTrialUsed(subData.free_trial_used || false);
         setIsSubscribed(subData.is_subscribed || false);
         localStorage.setItem(`${TRIAL_USED_KEY}_${uid}`, subData.free_trial_used ? 'true' : 'false');
+        setTrialStatusChecked(true);
       } else {
         const created = await createSubscriptionRecord(uid);
         
@@ -176,9 +207,12 @@ const DocumentCreator = () => {
           setFreeTrialUsed(false);
           setIsSubscribed(false);
           localStorage.setItem(`${TRIAL_USED_KEY}_${uid}`, 'false');
+          setTrialStatusChecked(true);
         } else {
+          // Last resort - check local storage
           const localTrialUsed = localStorage.getItem(`${TRIAL_USED_KEY}_${uid}`);
           setFreeTrialUsed(localTrialUsed === 'true');
+          setTrialStatusChecked(true);
         }
       }
     } catch (error) {
@@ -223,6 +257,9 @@ const DocumentCreator = () => {
           sessionStorage.setItem('supabase_auth_user', JSON.stringify(session.user));
           setIsAuthenticated(true);
           setUserId(session.user.id);
+          
+          // Force update subscription status on sign in
+          await checkAuthAndSubscription(true);
         }
         
         if (event === 'SIGNED_OUT') {
@@ -231,9 +268,10 @@ const DocumentCreator = () => {
           setFreeTrialUsed(false);
           setIsSubscribed(false);
           setCheckingAuthStatus(false);
+          setTrialStatusChecked(false);
           sessionStorage.removeItem('supabase_auth_user');
         } else if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') && session) {
-          await checkAuthAndSubscription();
+          await checkAuthAndSubscription(true);
         }
       }
     );
@@ -344,6 +382,20 @@ const DocumentCreator = () => {
         variant: "destructive",
       });
       return;
+    }
+
+    // Force a fresh check of trial status before generating document
+    if (userId && !isSubscribed && trialStatusChecked) {
+      const freshStatus = await fetchSubscriptionData(userId);
+      if (freshStatus) {
+        const trialAlreadyUsed = freshStatus.free_trial_used;
+        setFreeTrialUsed(trialAlreadyUsed);
+        
+        if (trialAlreadyUsed && !isSubscribed) {
+          setShowSubscriptionModal(true);
+          return;
+        }
+      }
     }
 
     if (freeTrialUsed && !isSubscribed && userId) {
@@ -521,7 +573,7 @@ const DocumentCreator = () => {
     if (checkingAuthStatus) {
       const timer = setTimeout(() => {
         console.log('Auth check is taking too long, attempting retry');
-        checkAuthAndSubscription();
+        checkAuthAndSubscription(true);
       }, 1500);
       
       return () => clearTimeout(timer);
@@ -543,6 +595,25 @@ const DocumentCreator = () => {
       }
     }
   }, [isAuthenticated, checkingAuthStatus]);
+
+  // Dedicated useEffect for forcing a subscription status check on component mount
+  useEffect(() => {
+    if (isAuthenticated && userId && !checkingAuthStatus && !trialStatusChecked) {
+      const checkSubscriptionStatus = async () => {
+        console.log('Performing dedicated subscription status check for user:', userId);
+        const freshStatus = await fetchSubscriptionData(userId);
+        
+        if (freshStatus) {
+          console.log('Retrieved fresh subscription status:', freshStatus);
+          setFreeTrialUsed(freshStatus.free_trial_used || false);
+          setIsSubscribed(freshStatus.is_subscribed || false);
+          setTrialStatusChecked(true);
+        }
+      };
+      
+      checkSubscriptionStatus();
+    }
+  }, [isAuthenticated, userId, checkingAuthStatus, trialStatusChecked, fetchSubscriptionData]);
 
   return (
     <div className="container relative py-8 animate-in fade-in slide-in-from-bottom-5 duration-500">

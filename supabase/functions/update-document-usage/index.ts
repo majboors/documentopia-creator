@@ -77,7 +77,7 @@ Deno.serve(async (req) => {
       if (existingUserSub.free_trial_used) {
         console.log('Free trial already used for user:', user_id);
         return new Response(
-          JSON.stringify({ success: true, message: 'Free trial already used' }),
+          JSON.stringify({ success: false, message: 'Free trial already used', trial_used: true }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }

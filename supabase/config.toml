@@ -1,1 +1,8 @@
+
 project_id = "rnxkknyghjfaetynbyaz"
+
+[functions.verify-payment]
+verify_jwt = false
+
+[functions.payment-callback]
+verify_jwt = false

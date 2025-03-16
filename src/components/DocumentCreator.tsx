@@ -1,11 +1,15 @@
+
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Section, Container, Heading, Text, Button, GlassCard } from './ui-components';
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { FileText, Send, Download, Copy, Check, Loader2, ExternalLink, CreditCard } from 'lucide-react';
+import { FileText, Send, Download, Copy, Check, Loader2, ExternalLink, CreditCard, LogOut } from 'lucide-react';
 import { toast } from "@/hooks/use-toast";
 import SubscriptionModal from './SubscriptionModal';
+import { supabase } from "@/integrations/supabase/client";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface GenerateResponse {
   success: boolean;
@@ -18,7 +22,14 @@ interface PaymentResponse {
   payment_url: string;
 }
 
+interface UserSession {
+  id: string | undefined;
+  email: string | undefined;
+}
+
 const DocumentCreator: React.FC = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [topic, setTopic] = useState('');
   const [description, setDescription] = useState('');
   const [numPages, setNumPages] = useState(3);
@@ -32,13 +43,111 @@ const DocumentCreator: React.FC = () => {
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [paymentUrl, setPaymentUrl] = useState('');
+  const [user, setUser] = useState<UserSession>({ id: undefined, email: undefined });
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
+  // Check for payment status from URL parameters (after redirect)
   useEffect(() => {
-    const storedUsageCount = localStorage.getItem('documentUsageCount');
-    if (storedUsageCount) {
-      setUsageCount(parseInt(storedUsageCount, 10));
+    const params = new URLSearchParams(location.search);
+    const paymentStatus = params.get('payment');
+    
+    if (paymentStatus === 'success') {
+      toast({
+        title: "Payment Successful",
+        description: "Your subscription has been activated. You now have unlimited access!",
+      });
+      // Remove the query parameter to prevent showing the toast on refresh
+      navigate('/create', { replace: true });
+    } else if (paymentStatus === 'failed' || paymentStatus === 'error') {
+      toast({
+        title: "Payment Failed",
+        description: "There was an issue processing your payment. Please try again.",
+        variant: "destructive"
+      });
+      // Remove the query parameter to prevent showing the toast on refresh
+      navigate('/create', { replace: true });
     }
-  }, []);
+  }, [location.search, navigate]);
+
+  // Check authentication
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        setIsLoading(true);
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!session) {
+          navigate('/auth');
+          return;
+        }
+        
+        setUser({
+          id: session.user.id,
+          email: session.user.email,
+        });
+        
+        // Get user's document usage count
+        const { data: usageData, error: usageError } = await supabase
+          .from('document_usage')
+          .select('count')
+          .eq('user_id', session.user.id)
+          .single();
+        
+        if (usageError) {
+          if (usageError.code !== 'PGRST116') { // Not found error
+            console.error('Error fetching usage count:', usageError);
+          }
+          // Initialize with 0 if not found
+          setUsageCount(0);
+        } else if (usageData) {
+          setUsageCount(usageData.count);
+        }
+        
+        // Check subscription status
+        const { data: subscriptionData, error: subscriptionError } = await supabase
+          .from('subscriptions')
+          .select('*')
+          .eq('user_id', session.user.id)
+          .eq('is_active', true)
+          .gt('expires_at', new Date().toISOString())
+          .order('created_at', { ascending: false })
+          .limit(1);
+        
+        if (subscriptionError) {
+          console.error('Error checking subscription:', subscriptionError);
+        } else {
+          setIsSubscribed(subscriptionData && subscriptionData.length > 0);
+        }
+      } catch (error) {
+        console.error('Error checking authentication:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    checkAuth();
+    
+    const authSubscription = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        setUser({
+          id: session.user.id,
+          email: session.user.email,
+        });
+      } else if (event === 'SIGNED_OUT') {
+        navigate('/auth');
+      }
+    });
+    
+    return () => {
+      authSubscription.data.subscription.unsubscribe();
+    };
+  }, [navigate]);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    navigate('/auth');
+  };
 
   const handleGenerate = async () => {
     if (!topic.trim()) {
@@ -50,7 +159,7 @@ const DocumentCreator: React.FC = () => {
       return;
     }
 
-    if (usageCount >= 1) {
+    if (usageCount >= 1 && !isSubscribed) {
       setShowSubscriptionModal(true);
       return;
     }
@@ -78,9 +187,23 @@ const DocumentCreator: React.FC = () => {
         setDocumentContent(`Document generated successfully!\n\nTopic: ${topic}\nPages: ${numPages}\n\nClick the Download button to get your document.`);
         setActiveTab('preview');
         
-        const newUsageCount = usageCount + 1;
-        setUsageCount(newUsageCount);
-        localStorage.setItem('documentUsageCount', newUsageCount.toString());
+        if (user.id) {
+          // Update usage count in the database
+          const newCount = usageCount + 1;
+          setUsageCount(newCount);
+          
+          const { error: updateError } = await supabase
+            .from('document_usage')
+            .upsert({ 
+              user_id: user.id,
+              count: newCount,
+              last_used: new Date().toISOString()
+            });
+          
+          if (updateError) {
+            console.error('Error updating usage count:', updateError);
+          }
+        }
         
         toast({
           title: "Document Generated",
@@ -106,16 +229,29 @@ const DocumentCreator: React.FC = () => {
   };
 
   const handleInitiatePayment = async () => {
+    if (!user.id) {
+      toast({
+        title: "Authentication Required",
+        description: "Please sign in to subscribe.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     setIsProcessingPayment(true);
     
     try {
+      // Create the redirection URL with the user ID
+      const redirectUrl = `${window.location.origin}/create?user_id=${user.id}`;
+      
       const response = await fetch('https://pay.techrealm.pk/create-payment', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          amount: 5141 // 14 USD
+          amount: 5141, // 14 USD
+          redirection_url: redirectUrl
         }),
       });
       
@@ -178,15 +314,47 @@ const DocumentCreator: React.FC = () => {
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-[60vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <Section className="min-h-screen pt-28 pb-16">
       <Container>
-        <div className="max-w-3xl mx-auto mb-10">
-          <Heading.H1 className="text-center mb-4">Document Creator</Heading.H1>
-          <Text.Lead className="text-center">
-            Describe the document you need, and our AI will generate it for you instantly.
-          </Text.Lead>
+        <div className="flex justify-between items-center max-w-3xl mx-auto mb-8">
+          <div>
+            <Heading.H1 className="mb-1">Document Creator</Heading.H1>
+            {user.email && (
+              <Text.Muted>Logged in as {user.email}</Text.Muted>
+            )}
+          </div>
+          <Button variant="outline" size="sm" onClick={handleSignOut}>
+            <LogOut className="mr-2 h-4 w-4" />
+            Sign Out
+          </Button>
         </div>
+
+        {isSubscribed ? (
+          <Alert className="max-w-3xl mx-auto mb-6 bg-primary/10 border-primary/25">
+            <AlertDescription className="text-center py-1">
+              <span className="font-semibold">✨ Premium Subscription Active</span> - You have unlimited document creation.
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <Alert className="max-w-3xl mx-auto mb-6">
+            <AlertDescription className="text-center py-1">
+              {usageCount === 0 ? (
+                "You have 1 free document creation."
+              ) : (
+                "You've used your free document. Subscribe for unlimited access."
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
 
         <GlassCard className="max-w-4xl mx-auto overflow-hidden">
           <Tabs 
@@ -260,7 +428,7 @@ const DocumentCreator: React.FC = () => {
                   <Button 
                     onClick={handleGenerate} 
                     className="w-full"
-                    disabled={!topic.trim() || isGenerating}
+                    disabled={!topic.trim() || isGenerating || (usageCount >= 1 && !isSubscribed)}
                   >
                     {isGenerating ? (
                       <>
@@ -274,6 +442,19 @@ const DocumentCreator: React.FC = () => {
                       </>
                     )}
                   </Button>
+                  
+                  {usageCount >= 1 && !isSubscribed && (
+                    <div className="text-center mt-4">
+                      <Text.Muted>You've used your free document creation.</Text.Muted>
+                      <Button 
+                        variant="link" 
+                        onClick={() => setShowSubscriptionModal(true)}
+                        className="mt-1"
+                      >
+                        Subscribe for unlimited access
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </TabsContent>
               
@@ -367,7 +548,7 @@ const DocumentCreator: React.FC = () => {
               </ul>
               <div className="mt-auto">
                 <Button variant="outline" className="w-full" disabled>
-                  Current Plan
+                  {usageCount >= 1 ? "Trial Used" : "Current Plan"}
                 </Button>
               </div>
             </GlassCard>
@@ -401,9 +582,16 @@ const DocumentCreator: React.FC = () => {
                 </li>
               </ul>
               <div className="mt-auto">
-                <Button className="w-full" onClick={() => setShowSubscriptionModal(true)}>
-                  Subscribe Now
-                </Button>
+                {isSubscribed ? (
+                  <Button className="w-full" disabled>
+                    <Check className="mr-2 h-4 w-4" />
+                    Currently Subscribed
+                  </Button>
+                ) : (
+                  <Button className="w-full" onClick={() => setShowSubscriptionModal(true)}>
+                    Subscribe Now
+                  </Button>
+                )}
               </div>
             </GlassCard>
           </div>

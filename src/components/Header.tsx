@@ -1,131 +1,74 @@
 
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Container, Button } from './ui-components';
-import { Menu, X, CreditCard } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { UserCircle } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 const Header: React.FC = () => {
-  const [isScrolled, setIsScrolled] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
-
-  const navItems = [
-    { label: 'Home', href: '/' },
-    { label: 'Create', href: '/create' },
-    { label: 'Features', href: '/#features' },
-    { label: 'Pricing', href: '/create#pricing' },
-  ];
-
-  const scrollToPricing = (e: React.MouseEvent) => {
-    // If we're already on the create page
-    if (location.pathname === '/create') {
-      e.preventDefault();
-      const pricingSection = document.getElementById('pricing');
-      if (pricingSection) {
-        pricingSection.scrollIntoView({ behavior: 'smooth' });
-      }
-    }
-  };
-
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  
   useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 20);
+    const checkAuth = async () => {
+      const { data } = await supabase.auth.getSession();
+      setIsAuthenticated(!!data.session);
     };
-
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    
+    checkAuth();
+    
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setIsAuthenticated(!!session);
+    });
+    
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  useEffect(() => {
-    setIsMobileMenuOpen(false);
-  }, [location.pathname]);
-
-  // Scroll to pricing section if the URL has #pricing
-  useEffect(() => {
-    if (location.hash === '#pricing') {
-      setTimeout(() => {
-        const pricingSection = document.getElementById('pricing');
-        if (pricingSection) {
-          pricingSection.scrollIntoView({ behavior: 'smooth' });
-        }
-      }, 100);
-    }
-  }, [location.hash]);
-
   return (
-    <header
-      className={`fixed top-0 left-0 right-0 z-50 py-4 transition-all duration-300 ${
-        isScrolled ? 'bg-background/80 backdrop-blur-lg shadow-soft' : 'bg-transparent'
-      }`}
-    >
-      <Container className="flex items-center justify-between">
-        <Link to="/" className="text-2xl font-bold tracking-tight transition-transform hover:scale-105 duration-300">
-          Documentopia
-        </Link>
-
-        {/* Desktop Navigation */}
-        <nav className="hidden md:flex items-center space-x-8">
-          <ul className="flex space-x-8">
-            {navItems.map((item) => (
-              <li key={item.label}>
-                <Link
-                  to={item.href}
-                  onClick={item.label === 'Pricing' ? scrollToPricing : undefined}
-                  className={`text-sm font-medium transition-all hover:text-primary ${
-                    location.pathname === item.href ? 'text-primary' : 'text-foreground'
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-          <Button asChild>
-            <Link to="/create">Get Started</Link>
-          </Button>
-        </nav>
-
-        {/* Mobile Menu Button */}
-        <button 
-          className="md:hidden flex items-center justify-center"
-          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
-        >
-          {isMobileMenuOpen ? (
-            <X className="h-6 w-6" />
-          ) : (
-            <Menu className="h-6 w-6" />
-          )}
-        </button>
-      </Container>
-
-      {/* Mobile Menu */}
-      {isMobileMenuOpen && (
-        <div className="md:hidden absolute top-full left-0 right-0 bg-background/95 backdrop-blur-lg shadow-medium animate-slide-down">
-          <Container className="py-5">
-            <ul className="flex flex-col space-y-3">
-              {navItems.map((item) => (
-                <li key={item.label}>
-                  <Link
-                    to={item.href}
-                    onClick={item.label === 'Pricing' ? scrollToPricing : undefined}
-                    className={`block py-2 text-lg font-medium hover:text-primary ${
-                      location.pathname === item.href ? 'text-primary' : 'text-foreground'
-                    }`}
-                  >
-                    {item.label}
-                  </Link>
-                </li>
-              ))}
-              <li className="pt-3">
-                <Button className="w-full" asChild>
-                  <Link to="/create">Get Started</Link>
-                </Button>
-              </li>
-            </ul>
-          </Container>
+    <header className="fixed w-full bg-background/80 backdrop-blur-md z-10 border-b">
+      <div className="container flex h-16 items-center justify-between py-4">
+        <div className="flex gap-6 md:gap-10">
+          <Link to="/" className="flex items-center space-x-2">
+            <span className="font-bold text-xl">DocGen</span>
+          </Link>
+          <nav className="flex gap-6">
+            <Link
+              to="/"
+              className={`text-sm font-medium transition-colors hover:text-primary ${
+                location.pathname === '/' ? 'text-foreground' : 'text-foreground/60'
+              }`}
+            >
+              Home
+            </Link>
+            <Link
+              to="/create"
+              className={`text-sm font-medium transition-colors hover:text-primary ${
+                location.pathname === '/create' ? 'text-foreground' : 'text-foreground/60'
+              }`}
+            >
+              Create
+            </Link>
+          </nav>
         </div>
-      )}
+        <div className="flex items-center gap-2">
+          {isAuthenticated ? (
+            <Link to="/create">
+              <Button size="sm" variant="ghost">
+                <UserCircle className="mr-2 h-4 w-4" />
+                Dashboard
+              </Button>
+            </Link>
+          ) : (
+            <Link to="/auth">
+              <Button size="sm">
+                Sign In
+              </Button>
+            </Link>
+          )}
+        </div>
+      </div>
     </header>
   );
 };

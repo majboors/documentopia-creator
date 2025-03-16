@@ -97,12 +97,13 @@ export function useToast() {
 
 // Direct toast function for use outside of components
 export const toast = (props: Omit<Toast, "id" | "open">) => {
-  const toastContext = React.useContext(ToastContext);
+  // Simple implementation for non-component usage
+  // Console warning is important - without removing this would cause confusion
+  console.warn("Toast used outside of React component tree. This will only work when the app is running and ToastProvider is mounted.");
   
-  if (!toastContext) {
-    console.error("Toast context not found. Make sure you have wrapped your app with ToastProvider.");
-    return { id: "0", dismiss: () => {} };
-  }
+  // Try to get access to toast context using document
+  const toastContextEvent = new CustomEvent('toast', { detail: props });
+  document.dispatchEvent(toastContextEvent);
   
-  return toastContext.toast(props);
+  return { id: "0", dismiss: () => {} };
 };

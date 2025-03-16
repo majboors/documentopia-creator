@@ -57,3 +57,8 @@ pattern = "payment-callback"
 name = "update-document-usage"
 verify_jwt = false
 pattern = "update-document-usage"
+
+[[functions.serve.functions]]
+name = "payment-fallback"
+verify_jwt = false
+pattern = "payment-fallback"

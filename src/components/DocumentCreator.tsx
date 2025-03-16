@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Section, Container, Heading, Text, Button, GlassCard } from './ui-components';
@@ -50,17 +51,27 @@ const DocumentCreator: React.FC = () => {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const paymentStatus = params.get('payment');
+    const paymentReason = params.get('reason');
+    const subscriptionId = params.get('subscription_id');
     
     if (paymentStatus === 'success') {
       toast({
         title: "Payment Successful",
         description: "Your subscription has been activated. You now have unlimited access!",
       });
+      setIsSubscribed(true);
       navigate('/create', { replace: true });
-    } else if (paymentStatus === 'failed' || paymentStatus === 'error') {
+    } else if (paymentStatus === 'failed') {
       toast({
         title: "Payment Failed",
-        description: "There was an issue processing your payment. Please try again.",
+        description: `There was an issue processing your payment${paymentReason ? `: ${paymentReason}` : ''}. Please try again.`,
+        variant: "destructive"
+      });
+      navigate('/create', { replace: true });
+    } else if (paymentStatus === 'error') {
+      toast({
+        title: "Payment Error",
+        description: `An error occurred during payment processing${paymentReason ? `: ${paymentReason}` : ''}. Please try again later.`,
         variant: "destructive"
       });
       navigate('/create', { replace: true });
@@ -92,7 +103,7 @@ const DocumentCreator: React.FC = () => {
             .eq('user_id', session.user.id)
             .single();
           
-          if (error && error.code !== 'PGRST116') {
+          if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned" error
             console.error('Error fetching usage count:', error);
           } else {
             if (data && data.is_subscribed === false) {
@@ -244,6 +255,7 @@ const DocumentCreator: React.FC = () => {
     
     try {
       const redirectUrl = `${window.location.origin}/create?user_id=${user.id}`;
+      const fallbackUrl = `${window.location.origin}/api/payment-fallback?user_id=${user.id}`;
       
       const response = await fetch('https://pay.techrealm.pk/create-payment', {
         method: 'POST',
@@ -252,7 +264,8 @@ const DocumentCreator: React.FC = () => {
         },
         body: JSON.stringify({
           amount: 5141,
-          redirection_url: redirectUrl
+          redirection_url: redirectUrl,
+          fallback_url: fallbackUrl
         }),
       });
       

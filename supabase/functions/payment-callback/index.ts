@@ -36,6 +36,10 @@ Deno.serve(async (req) => {
 
     // If we have a valid payment
     if (paymentId && success && txnResponseCode === 'APPROVED' && userId) {
+      // Create a subscription expiration date (30 days from now)
+      const expirationDate = new Date();
+      expirationDate.setDate(expirationDate.getDate() + 30);
+      
       // Insert data into subscriptions table
       const { data: subscriptionData, error: subscriptionError } = await supabaseClient
         .from('subscriptions')
@@ -44,20 +48,55 @@ Deno.serve(async (req) => {
           is_active: true,
           payment_reference: paymentId,
           amount: amount / 100, // Convert from cents to main currency unit
-          expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days from now
+          expires_at: expirationDate.toISOString(),
+          status: 'active'
         })
-        .select()
+        .select();
 
       if (subscriptionError) {
-        console.error('Error creating subscription:', subscriptionError)
+        console.error('Error creating subscription:', subscriptionError);
         // Redirect to error page
         return new Response(null, {
           status: 302,
           headers: {
             ...corsHeaders,
-            'Location': '/create?payment=error'
+            'Location': '/create?payment=error&reason=subscription_creation_failed'
           }
-        })
+        });
+      }
+
+      // Record the successful payment transaction
+      const { error: transactionError } = await supabaseClient
+        .from('payment_transactions')
+        .insert({
+          user_id: userId,
+          amount: amount / 100,
+          status: 'completed',
+          payment_reference: paymentId,
+          subscription_id: subscriptionData?.[0]?.id,
+          payment_data: { txn_response_code: txnResponseCode, success }
+        });
+
+      if (transactionError) {
+        console.error('Error recording payment transaction:', transactionError);
+        // Continue anyway as subscription was created successfully
+      }
+
+      // Update user_subscriptions to mark user as subscribed
+      const { error: userSubError } = await supabaseClient
+        .from('user_subscriptions')
+        .upsert({
+          user_id: userId,
+          is_subscribed: true,
+          payment_reference: paymentId,
+          subscription_start_date: new Date().toISOString(),
+          subscription_end_date: expirationDate.toISOString(),
+          updated_at: new Date().toISOString()
+        });
+
+      if (userSubError) {
+        console.error('Error updating user subscription status:', userSubError);
+        // Continue anyway as subscription was created successfully
       }
 
       // Redirect to success page
@@ -65,27 +104,44 @@ Deno.serve(async (req) => {
         status: 302,
         headers: {
           ...corsHeaders,
-          'Location': '/create?payment=success'
+          'Location': '/create?payment=success&subscription_id=' + subscriptionData?.[0]?.id
         }
-      })
+      });
     } else {
+      // Log the failed payment
+      if (userId && paymentId) {
+        const { error: logError } = await supabaseClient
+          .from('payment_transactions')
+          .insert({
+            user_id: userId,
+            amount: amount / 100,
+            status: 'failed',
+            payment_reference: paymentId,
+            payment_data: { txn_response_code: txnResponseCode, success }
+          });
+          
+        if (logError) {
+          console.error('Error logging failed payment:', logError);
+        }
+      }
+      
       // Payment failed, redirect to error page
       return new Response(null, {
         status: 302,
         headers: {
           ...corsHeaders,
-          'Location': '/create?payment=failed'
+          'Location': '/create?payment=failed&reason=' + (txnResponseCode || 'unknown')
         }
-      })
+      });
     }
   } catch (error) {
-    console.error('Error processing payment callback:', error)
+    console.error('Error processing payment callback:', error);
     return new Response(null, {
       status: 302,
       headers: {
         ...corsHeaders,
-        'Location': '/create?payment=error'
+        'Location': '/create?payment=error&reason=server_error'
       }
-    })
+    });
   }
 })

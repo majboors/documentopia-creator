@@ -5,19 +5,14 @@ import { createContext, useContext, useState } from "react";
 const TOAST_REMOVE_DELAY = 1000;
 
 // Base toast type
-type BaseToast = {
-  id?: string;
+type ToasterToast = {
+  id: string;
   title?: React.ReactNode;
   description?: React.ReactNode;
-  action?: ToastActionElement;
-  variant?: "default" | "destructive";
-};
-
-// Full toast type with required ID and open state
-type ToasterToast = BaseToast & {
-  id: string;
+  action?: React.ReactElement;
   open: boolean;
   onOpenChange?: (open: boolean) => void;
+  variant?: "default" | "destructive";
 };
 
 type ToastActionElement = React.ReactElement<{
@@ -146,7 +141,7 @@ function dispatch(action: Action) {
   });
 }
 
-type ToastOptions = Omit<BaseToast, "id">;
+type ToastOptions = Omit<ToasterToast, "id" | "open">;
 
 function toast({ ...props }: ToastOptions) {
   const id = genId();

@@ -40,22 +40,22 @@ enabled = false
 [functions]
 enabled = true
 
-[[function]]
+[[functions.function]]
 name = "verify-payment"
 verify_jwt = false
 pattern = "verify-payment"
 
-[[function]]
+[[functions.function]]
 name = "payment-callback"
 verify_jwt = false
 pattern = "payment-callback"
 
-[[function]]
+[[functions.function]]
 name = "update-document-usage"
 verify_jwt = false
 pattern = "update-document-usage"
 
-[[function]]
+[[functions.function]]
 name = "payment-fallback"
 verify_jwt = false
 pattern = "payment-fallback"

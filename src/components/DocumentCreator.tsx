@@ -44,10 +44,15 @@ const DocumentCreator = () => {
     setCompletion("")
 
     try {
+      // Pass the prompt as the first parameter
+      // For custom data, use the second parameter which should be a body object
+      // that gets passed directly to the API endpoint
       await complete(prompt, {
-        temperature,
-        framework: selectedFramework,
-        context: contextEnabled,
+        body: {
+          temperature,
+          framework: selectedFramework,
+          context: contextEnabled,
+        },
       });
     } catch (error: any) {
       toast({

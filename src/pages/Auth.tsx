@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -18,31 +19,70 @@ const Auth = () => {
   const returnUrl = state?.returnUrl || '/create';
   
   const [loading, setLoading] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [activeTab, setActiveTab] = useState('signin');
 
   // Check if user is already logged in
   useEffect(() => {
+    let isMounted = true;
+    let sessionCheckTimeout: NodeJS.Timeout;
+    
     const checkSession = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (data.session) {
-        navigate(returnUrl);
+      try {
+        setCheckingSession(true);
+        const { data, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('Error checking session:', error);
+          if (isMounted) {
+            setCheckingSession(false);
+          }
+          return;
+        }
+        
+        if (data.session && isMounted) {
+          // User is already logged in, redirect to return URL
+          navigate(returnUrl);
+        } else if (isMounted) {
+          setCheckingSession(false);
+        }
+      } catch (error) {
+        console.error('Error in checkSession:', error);
+        if (isMounted) {
+          setCheckingSession(false);
+        }
       }
     };
     
+    // Set a timeout to prevent getting stuck
+    sessionCheckTimeout = setTimeout(() => {
+      if (isMounted && checkingSession) {
+        console.log('Session check timeout reached');
+        setCheckingSession(false);
+      }
+    }, 3000);
+    
     checkSession();
-
+    
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        if (session) {
+        console.log('Auth state changed:', event);
+        
+        if (!isMounted) return;
+        
+        if (session && event === 'SIGNED_IN') {
+          // User signed in, redirect to return URL
           navigate(returnUrl);
         }
       }
     );
 
     return () => {
+      isMounted = false;
+      clearTimeout(sessionCheckTimeout);
       subscription.unsubscribe();
     };
   }, [navigate, returnUrl]);
@@ -68,7 +108,13 @@ const Auth = () => {
       
       if (error) throw error;
       
-      // Success is handled by the onAuthStateChange listener
+      // Success notification
+      toast({
+        title: 'Welcome back!',
+        description: 'You have successfully signed in.',
+      });
+      
+      // Redirect is handled by the onAuthStateChange listener
     } catch (error: any) {
       toast({
         title: 'Error signing in',
@@ -118,6 +164,17 @@ const Auth = () => {
       setLoading(false);
     }
   };
+
+  if (checkingSession) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
+          <Text.Muted>Checking authentication status...</Text.Muted>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/30 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">

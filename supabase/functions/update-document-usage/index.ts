@@ -1,107 +1,141 @@
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.1'
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
 
-const handler = async (req: Request): Promise<Response> => {
+interface RequestPayload {
+  user_id: string;
+  count: number;
+}
+
+Deno.serve(async (req) => {
   // Handle CORS preflight requests
-  if (req.method === "OPTIONS") {
+  if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
-  
+
   try {
-    const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
-    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    
-    // Parse the request body
-    const { user_id, count } = await req.json();
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    );
+
+    // Check request method
+    if (req.method !== 'POST') {
+      return new Response(
+        JSON.stringify({ error: 'Method not allowed' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 405 }
+      );
+    }
+
+    // Parse request body
+    const { user_id, count } = await req.json() as RequestPayload;
     
     if (!user_id) {
+      console.error('Missing user_id in request');
       return new Response(
-        JSON.stringify({ error: "Missing user_id parameter" }),
-        { 
-          status: 400, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
-        }
+        JSON.stringify({ error: 'Missing required field: user_id' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
     }
-    
-    console.log(`Processing usage update for user: ${user_id}`);
-    
-    // First check if there's an existing record for this user
-    const { data: existingData, error: fetchError } = await supabase
-      .from("user_subscriptions")
-      .select("*")
-      .eq("user_id", user_id)
+
+    console.log(`Updating usage for user: ${user_id} with count: ${count}`);
+
+    // First check if user_subscriptions entry exists for this user
+    const { data: existingUserSub, error: checkError } = await supabaseClient
+      .from('user_subscriptions')
+      .select('id, free_trial_used, is_subscribed')
+      .eq('user_id', user_id)
       .maybeSingle();
-    
-    if (fetchError) {
-      console.error("Error fetching user subscription:", fetchError);
+
+    if (checkError) {
+      console.error('Error checking user subscription:', checkError);
       return new Response(
-        JSON.stringify({ error: fetchError.message }),
-        { 
-          status: 500, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
-        }
+        JSON.stringify({ error: 'Error checking user subscription', details: checkError }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
       );
     }
-    
-    // If user already used their free trial, return error
-    if (existingData?.free_trial_used && count > 0) {
-      return new Response(
-        JSON.stringify({ error: "Free trial already used", freeTrialUsed: true }),
-        { 
-          status: 403, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
-        }
-      );
-    }
-    
-    // Update the record tracking free trial usage
-    const { data, error } = await supabase
-      .from("user_subscriptions")
-      .upsert({ 
-        user_id, 
-        free_trial_used: count > 0, // Track if free trial has been used
-        is_subscribed: existingData?.is_subscribed || false, // Don't change subscription status
-        updated_at: new Date().toISOString() 
-      });
-    
-    if (error) {
-      console.error("Error updating document usage:", error);
-      return new Response(
-        JSON.stringify({ error: error.message }),
-        { 
-          status: 500, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
-        }
-      );
-    }
-    
-    console.log(`Successfully updated usage for user: ${user_id}, free trial used: ${count > 0}`);
-    
-    return new Response(
-      JSON.stringify({ success: true, freeTrialUsed: count > 0 }),
-      { 
-        status: 200, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+
+    console.log('Existing user subscription:', existingUserSub);
+
+    if (existingUserSub) {
+      // If user is already subscribed, we don't need to mark trial as used
+      if (existingUserSub.is_subscribed) {
+        console.log('User is already subscribed, no need to mark trial as used');
+        return new Response(
+          JSON.stringify({ success: true, message: 'User is already subscribed' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
-    );
+
+      // If trial is already used, don't do anything but return a message
+      if (existingUserSub.free_trial_used) {
+        console.log('Free trial already used for user:', user_id);
+        return new Response(
+          JSON.stringify({ success: true, message: 'Free trial already used' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Update the existing record to mark trial as used
+      const { data: updateData, error: updateError } = await supabaseClient
+        .from('user_subscriptions')
+        .update({ 
+          free_trial_used: true,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', existingUserSub.id)
+        .select();
+
+      if (updateError) {
+        console.error('Error updating user subscription:', updateError);
+        return new Response(
+          JSON.stringify({ error: 'Error updating user subscription', details: updateError }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
+
+      console.log('Successfully marked free trial as used:', updateData);
+      return new Response(
+        JSON.stringify({ success: true, message: 'Free trial marked as used', data: updateData }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    } else {
+      // Create a new user_subscriptions entry
+      console.log('Creating new user subscription entry');
+      const { data: insertData, error: insertError } = await supabaseClient
+        .from('user_subscriptions')
+        .insert({
+          user_id: user_id,
+          free_trial_used: true,
+          is_subscribed: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select();
+
+      if (insertError) {
+        console.error('Error creating user subscription:', insertError);
+        return new Response(
+          JSON.stringify({ error: 'Error creating user subscription', details: insertError }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
+
+      console.log('Successfully created and marked free trial as used:', insertData);
+      return new Response(
+        JSON.stringify({ success: true, message: 'User subscription created with free trial used', data: insertData }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
   } catch (error) {
-    console.error("Server error:", error);
+    console.error('Unexpected error in update-document-usage:', error);
     return new Response(
-      JSON.stringify({ error: "Internal server error" }),
-      { 
-        status: 500, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      }
+      JSON.stringify({ error: 'Internal server error', details: error.message }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
-};
-
-serve(handler);
+});

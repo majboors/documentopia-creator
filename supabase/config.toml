@@ -37,26 +37,25 @@ enabled = false
 [storage]
 enabled = false
 
-# Proper format for functions section
 [functions]
 enabled = true
 
-[[functions.function]]
+[[function]]
 name = "verify-payment"
 verify_jwt = false
 pattern = "verify-payment"
 
-[[functions.function]]
+[[function]]
 name = "payment-callback"
 verify_jwt = false
 pattern = "payment-callback"
 
-[[functions.function]]
+[[function]]
 name = "update-document-usage"
 verify_jwt = false
 pattern = "update-document-usage"
 
-[[functions.function]]
+[[function]]
 name = "payment-fallback"
 verify_jwt = false
 pattern = "payment-fallback"

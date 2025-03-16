@@ -5,11 +5,12 @@ import { Section, Container, Heading, Text, Button, GlassCard } from './ui-compo
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { FileText, Send, Download, Copy, Check, Loader2, ExternalLink, CreditCard, LogOut } from 'lucide-react';
+import { FileText, Send, Download, Copy, Check, Loader2, ExternalLink, CreditCard, LogOut, Crown, Diamond, Star } from 'lucide-react';
 import { toast } from "@/hooks/use-toast";
 import SubscriptionModal from './SubscriptionModal';
 import { supabase } from "@/integrations/supabase/client";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 
 interface GenerateResponse {
   success: boolean;
@@ -87,21 +88,15 @@ const DocumentCreator: React.FC = () => {
           email: session.user.email,
         });
         
-        // Get user's document usage count
+        // Get user's document usage count using RPC function
         const { data: usageData, error: usageError } = await supabase
-          .from('document_usage')
-          .select('count')
-          .eq('user_id', session.user.id)
-          .single();
+          .rpc('get_document_usage', { user_uuid: session.user.id });
         
         if (usageError) {
-          if (usageError.code !== 'PGRST116') { // Not found error
-            console.error('Error fetching usage count:', usageError);
-          }
-          // Initialize with 0 if not found
+          console.error('Error fetching usage count:', usageError);
           setUsageCount(0);
-        } else if (usageData) {
-          setUsageCount(usageData.count);
+        } else {
+          setUsageCount(usageData || 0);
         }
         
         // Check subscription status
@@ -327,7 +322,15 @@ const DocumentCreator: React.FC = () => {
       <Container>
         <div className="flex justify-between items-center max-w-3xl mx-auto mb-8">
           <div>
-            <Heading.H1 className="mb-1">Document Creator</Heading.H1>
+            <div className="flex items-center gap-2">
+              <Heading.H1 className="mb-1">Document Creator</Heading.H1>
+              {isSubscribed && (
+                <Badge className="bg-purple-500 hover:bg-purple-600">
+                  <Crown className="h-3.5 w-3.5 mr-1" />
+                  Premium
+                </Badge>
+              )}
+            </div>
             {user.email && (
               <Text.Muted>Logged in as {user.email}</Text.Muted>
             )}
@@ -339,9 +342,11 @@ const DocumentCreator: React.FC = () => {
         </div>
 
         {isSubscribed ? (
-          <Alert className="max-w-3xl mx-auto mb-6 bg-primary/10 border-primary/25">
-            <AlertDescription className="text-center py-1">
-              <span className="font-semibold">✨ Premium Subscription Active</span> - You have unlimited document creation.
+          <Alert className="max-w-3xl mx-auto mb-6 bg-purple-100 border-purple-200 dark:bg-purple-900/20 dark:border-purple-800/30">
+            <AlertDescription className="text-center py-1 flex items-center justify-center gap-2">
+              <Crown className="h-4 w-4 text-purple-500" />
+              <span className="font-semibold text-purple-700 dark:text-purple-300">Premium Subscription Active</span>
+              <span className="text-purple-600 dark:text-purple-400">- You have unlimited document creation</span>
             </AlertDescription>
           </Alert>
         ) : (
@@ -384,50 +389,65 @@ const DocumentCreator: React.FC = () => {
               <TabsContent value="create" className="mt-0">
                 <div className="space-y-6">
                   <div>
-                    <label htmlFor="document-title" className="block text-sm font-medium mb-1">
+                    <label htmlFor="document-title" className="block text-sm font-medium mb-1 flex items-center gap-1">
                       Document Topic
+                      {isSubscribed && (
+                        <Diamond className="h-3.5 w-3.5 text-purple-500 ml-1" />
+                      )}
                     </label>
                     <Input 
                       id="document-title"
                       placeholder="Enter a topic for your document"
                       value={topic}
                       onChange={(e) => setTopic(e.target.value)}
-                      className="w-full"
+                      className={`w-full ${isSubscribed ? 'border-purple-200 focus-visible:ring-purple-500/20' : ''}`}
                     />
                   </div>
                   
                   <div>
-                    <label htmlFor="document-description" className="block text-sm font-medium mb-1">
+                    <label htmlFor="document-description" className="block text-sm font-medium mb-1 flex items-center gap-1">
                       Additional Details (Optional)
+                      {isSubscribed && (
+                        <Diamond className="h-3.5 w-3.5 text-purple-500 ml-1" />
+                      )}
                     </label>
                     <Textarea 
                       id="document-description"
                       placeholder="Add any additional details you'd like to include in the document"
                       rows={4}
-                      className="w-full resize-none"
+                      className={`w-full resize-none ${isSubscribed ? 'border-purple-200 focus-visible:ring-purple-500/20' : ''}`}
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
                     />
                   </div>
                   
                   <div>
-                    <label htmlFor="num-pages" className="block text-sm font-medium mb-1">
+                    <label htmlFor="num-pages" className="block text-sm font-medium mb-1 flex items-center gap-1">
                       Number of Pages
+                      {isSubscribed && (
+                        <Diamond className="h-3.5 w-3.5 text-purple-500 ml-1" />
+                      )}
                     </label>
                     <Input 
                       id="num-pages"
                       type="number"
                       min={1}
-                      max={10}
+                      max={isSubscribed ? 20 : 10}
                       value={numPages}
                       onChange={(e) => setNumPages(parseInt(e.target.value) || 3)}
-                      className="w-full"
+                      className={`w-full ${isSubscribed ? 'border-purple-200 focus-visible:ring-purple-500/20' : ''}`}
                     />
+                    {isSubscribed && (
+                      <Text.Muted className="mt-1 text-purple-500 flex items-center">
+                        <Star className="h-3 w-3 mr-1" /> 
+                        Premium users can create up to 20-page documents
+                      </Text.Muted>
+                    )}
                   </div>
                   
                   <Button 
                     onClick={handleGenerate} 
-                    className="w-full"
+                    className={`w-full ${isSubscribed ? 'bg-purple-600 hover:bg-purple-700' : ''}`}
                     disabled={!topic.trim() || isGenerating || (usageCount >= 1 && !isSubscribed)}
                   >
                     {isGenerating ? (
@@ -439,6 +459,7 @@ const DocumentCreator: React.FC = () => {
                       <>
                         <Send className="mr-2 h-4 w-4" />
                         Generate Document
+                        {isSubscribed && <Crown className="ml-2 h-4 w-4" />}
                       </>
                     )}
                   </Button>
@@ -553,42 +574,45 @@ const DocumentCreator: React.FC = () => {
               </div>
             </GlassCard>
             
-            <GlassCard className="p-6 flex flex-col h-full border-primary relative overflow-hidden">
-              <div className="absolute top-0 right-0 bg-primary text-primary-foreground py-1 px-3 text-xs font-medium">
-                RECOMMENDED
+            <GlassCard className="p-6 flex flex-col h-full border-purple-500 relative overflow-hidden">
+              <div className="absolute top-0 right-0 bg-purple-500 text-primary-foreground py-1 px-3 text-xs font-medium flex items-center gap-1">
+                <Crown className="h-3 w-3" /> PREMIUM
               </div>
-              <div className="p-4 bg-primary/10 rounded-full w-12 h-12 flex items-center justify-center mb-4">
-                <CreditCard className="h-6 w-6 text-primary" />
+              <div className="p-4 bg-purple-100 dark:bg-purple-900/20 rounded-full w-12 h-12 flex items-center justify-center mb-4">
+                <CreditCard className="h-6 w-6 text-purple-500" />
               </div>
-              <Heading.H3 className="mb-2">Starter Package</Heading.H3>
+              <Heading.H3 className="mb-2 flex items-center">
+                Premium Package
+                <Diamond className="h-4 w-4 text-purple-500 ml-2" />
+              </Heading.H3>
               <Text.Regular className="mb-2">$14/month</Text.Regular>
               <div className="border-t border-border my-4" />
               <ul className="space-y-3 mb-8 flex-grow">
                 <li className="flex items-start">
-                  <Check className="h-5 w-5 text-primary mr-2 flex-shrink-0" />
+                  <Check className="h-5 w-5 text-purple-500 mr-2 flex-shrink-0" />
                   <Text.Regular>Unlimited document creation</Text.Regular>
                 </li>
                 <li className="flex items-start">
-                  <Check className="h-5 w-5 text-primary mr-2 flex-shrink-0" />
+                  <Check className="h-5 w-5 text-purple-500 mr-2 flex-shrink-0" />
                   <Text.Regular>Advanced formatting options</Text.Regular>
                 </li>
                 <li className="flex items-start">
-                  <Check className="h-5 w-5 text-primary mr-2 flex-shrink-0" />
+                  <Check className="h-5 w-5 text-purple-500 mr-2 flex-shrink-0" />
                   <Text.Regular>Priority support</Text.Regular>
                 </li>
                 <li className="flex items-start">
-                  <Check className="h-5 w-5 text-primary mr-2 flex-shrink-0" />
+                  <Check className="h-5 w-5 text-purple-500 mr-2 flex-shrink-0" />
                   <Text.Regular>Download in multiple formats</Text.Regular>
                 </li>
               </ul>
               <div className="mt-auto">
                 {isSubscribed ? (
-                  <Button className="w-full" disabled>
-                    <Check className="mr-2 h-4 w-4" />
+                  <Button className="w-full bg-purple-600 hover:bg-purple-700" disabled>
+                    <Crown className="mr-2 h-4 w-4" />
                     Currently Subscribed
                   </Button>
                 ) : (
-                  <Button className="w-full" onClick={() => setShowSubscriptionModal(true)}>
+                  <Button className="w-full bg-purple-600 hover:bg-purple-700" onClick={() => setShowSubscriptionModal(true)}>
                     Subscribe Now
                   </Button>
                 )}
@@ -603,6 +627,7 @@ const DocumentCreator: React.FC = () => {
         onClose={() => setShowSubscriptionModal(false)}
         onPayment={handleInitiatePayment}
         isProcessing={isProcessingPayment}
+        isPremium={isSubscribed}
       />
     </Section>
   );

@@ -89,14 +89,17 @@ const DocumentCreator: React.FC = () => {
         });
         
         // Get user's document usage count using RPC function
-        const { data: usageData, error: usageError } = await supabase
-          .rpc('get_document_usage', { user_uuid: session.user.id });
-        
-        if (usageError) {
-          console.error('Error fetching usage count:', usageError);
-          setUsageCount(0);
-        } else {
-          setUsageCount(usageData || 0);
+        if (session.user.id) {
+          const { data: usageData, error: usageError } = await supabase
+            .rpc('get_document_usage', { user_uuid: session.user.id });
+          
+          if (usageError) {
+            console.error('Error fetching usage count:', usageError);
+            setUsageCount(0);
+          } else {
+            // Ensure we're setting a number value
+            setUsageCount(typeof usageData === 'number' ? usageData : 0);
+          }
         }
         
         // Check subscription status
@@ -183,20 +186,25 @@ const DocumentCreator: React.FC = () => {
         setActiveTab('preview');
         
         if (user.id) {
-          // Update usage count in the database
+          // Update usage count in the database using upsert on document_usage
           const newCount = usageCount + 1;
           setUsageCount(newCount);
           
-          const { error: updateError } = await supabase
-            .from('document_usage')
-            .upsert({ 
-              user_id: user.id,
-              count: newCount,
-              last_used: new Date().toISOString()
-            });
+          // First check if the document_usage record exists
+          const { data: existingUsage } = await supabase
+            .rpc('get_document_usage', { user_uuid: user.id });
           
-          if (updateError) {
-            console.error('Error updating usage count:', updateError);
+          if (existingUsage !== null) {
+            // Use RPC to update the count
+            const { error: updateError } = await supabase
+              .rpc('update_document_usage', { 
+                user_uuid: user.id,
+                new_count: newCount
+              });
+            
+            if (updateError) {
+              console.error('Error updating usage count:', updateError);
+            }
           }
         }
         

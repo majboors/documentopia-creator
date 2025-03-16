@@ -1,8 +1,54 @@
 
 project_id = "rnxkknyghjfaetynbyaz"
 
-[functions.verify-payment]
-verify_jwt = false
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
 
-[functions.payment-callback]
-verify_jwt = false
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+api_url = "http://localhost:54321"
+
+[inbucket]
+enabled = true
+port = 54324
+smtp_port = 54325
+pop3_port = 54326
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["https://localhost:3000"]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+enable_signup = true
+
+[realtime]
+enabled = false
+
+[storage]
+enabled = false
+
+[edge_functions]
+enabled = true
+port = 54321
+
+[[edge_functions.routes]]
+path = "verify-payment"
+function = "verify-payment"
+ 
+[[edge_functions.routes]]
+path = "payment-callback"
+function = "payment-callback"
+
+[[edge_functions.routes]]
+path = "update-document-usage"
+function = "update-document-usage"

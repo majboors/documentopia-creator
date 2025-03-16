@@ -37,18 +37,18 @@ enabled = false
 [storage]
 enabled = false
 
-[edge_functions]
+[functions]
 enabled = true
 port = 54321
 
-[[edge_functions.routes]]
+[[functions.routes]]
 path = "verify-payment"
 function = "verify-payment"
  
-[[edge_functions.routes]]
+[[functions.routes]]
 path = "payment-callback"
 function = "payment-callback"
 
-[[edge_functions.routes]]
+[[functions.routes]]
 path = "update-document-usage"
 function = "update-document-usage"

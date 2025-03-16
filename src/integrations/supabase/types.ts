@@ -82,9 +82,12 @@ export type Database = {
           amount: number | null
           created_at: string
           expires_at: string | null
+          free_trial_used: boolean
           id: string
           is_active: boolean
           payment_reference: string | null
+          presentations_generated: number
+          status: string
           updated_at: string
           user_id: string
         }
@@ -92,9 +95,12 @@ export type Database = {
           amount?: number | null
           created_at?: string
           expires_at?: string | null
+          free_trial_used?: boolean
           id?: string
           is_active?: boolean
           payment_reference?: string | null
+          presentations_generated?: number
+          status?: string
           updated_at?: string
           user_id: string
         }
@@ -102,9 +108,12 @@ export type Database = {
           amount?: number | null
           created_at?: string
           expires_at?: string | null
+          free_trial_used?: boolean
           id?: string
           is_active?: boolean
           payment_reference?: string | null
+          presentations_generated?: number
+          status?: string
           updated_at?: string
           user_id?: string
         }

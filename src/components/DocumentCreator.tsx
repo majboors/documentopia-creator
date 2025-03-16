@@ -88,17 +88,26 @@ const DocumentCreator: React.FC = () => {
           email: session.user.email,
         });
         
-        // Get user's document usage count using RPC function
+        // Get user's document usage count using Edge Function
         if (session.user.id) {
-          const { data: usageData, error: usageError } = await supabase
-            .rpc('get_document_usage', { user_uuid: session.user.id });
-          
-          if (usageError) {
-            console.error('Error fetching usage count:', usageError);
+          try {
+            // First check if the document_usage record exists
+            const { data, error } = await supabase
+              .from('document_usage')
+              .select('count')
+              .eq('user_id', session.user.id)
+              .single();
+            
+            if (error && error.code !== 'PGRST116') { // PGRST116 is "No rows returned" error
+              console.error('Error fetching usage count:', error);
+              setUsageCount(0);
+            } else {
+              // Ensure we're setting a number value
+              setUsageCount(data ? (typeof data.count === 'number' ? data.count : 0) : 0);
+            }
+          } catch (error) {
+            console.error('Error fetching document usage:', error);
             setUsageCount(0);
-          } else {
-            // Ensure we're setting a number value
-            setUsageCount(typeof usageData === 'number' ? usageData : 0);
           }
         }
         
@@ -186,25 +195,24 @@ const DocumentCreator: React.FC = () => {
         setActiveTab('preview');
         
         if (user.id) {
-          // Update usage count in the database using upsert on document_usage
+          // Update usage count in the database using edge function
           const newCount = usageCount + 1;
           setUsageCount(newCount);
           
-          // First check if the document_usage record exists
-          const { data: existingUsage } = await supabase
-            .rpc('get_document_usage', { user_uuid: user.id });
-          
-          if (existingUsage !== null) {
-            // Use RPC to update the count
-            const { error: updateError } = await supabase
-              .rpc('update_document_usage', { 
-                user_uuid: user.id,
-                new_count: newCount
-              });
+          try {
+            // Update document usage with edge function
+            const { data: updateData, error: updateError } = await supabase.functions.invoke('update-document-usage', {
+              body: { 
+                user_id: user.id,
+                count: newCount
+              }
+            });
             
             if (updateError) {
               console.error('Error updating usage count:', updateError);
             }
+          } catch (error) {
+            console.error('Error invoking update-document-usage function:', error);
           }
         }
         

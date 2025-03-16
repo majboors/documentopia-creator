@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Header from '@/components/Header';
@@ -12,12 +11,11 @@ const Creator = () => {
   const navigate = useNavigate();
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
-  const [authCheckAttempts, setAuthCheckAttempts] = useState(0);
-
+  
   // Check auth status on component mount
   useEffect(() => {
     let isMounted = true;
-    let authTimeout: NodeJS.Timeout;
+    let authCheckTimeout: NodeJS.Timeout | null = null;
     
     const checkAuthStatus = async () => {
       try {
@@ -34,14 +32,8 @@ const Creator = () => {
             return;
           }
         }
-        
-        // Check if there's a redirect URL in localStorage (set by Auth.tsx)
-        const redirectUrl = localStorage.getItem('auth_redirect_url');
-        if (redirectUrl) {
-          localStorage.removeItem('auth_redirect_url');
-          console.log('Found redirect URL in localStorage:', redirectUrl);
-        }
 
+        // If not in sessionStorage, check with Supabase
         const { data, error } = await supabase.auth.getSession();
         
         if (error) {
@@ -58,15 +50,11 @@ const Creator = () => {
         }
         
         if (!data.session) {
-          console.log('No active session found, redirecting to auth page');
+          console.log('No active session found in Creator page');
           if (isMounted) {
-            if (authCheckAttempts < 2) {
-              setAuthCheckAttempts(prev => prev + 1);
-              console.log(`Auth check attempt ${authCheckAttempts + 1} failed, retrying...`);
-              setTimeout(checkAuthStatus, 500);
-            } else {
-              navigate('/auth', { state: { returnUrl: '/create' } });
-            }
+            // Instead of immediately redirecting, set a flag and handle redirect after a timeout
+            setIsCheckingAuth(false);
+            setUserId(null);
           }
         } else if (isMounted) {
           console.log('User is authenticated in Creator page, ID:', data.session.user.id);
@@ -86,16 +74,12 @@ const Creator = () => {
     checkAuthStatus();
     
     // Set a max timeout for the auth check to prevent infinite loading
-    authTimeout = setTimeout(() => {
+    authCheckTimeout = setTimeout(() => {
       if (isMounted && isCheckingAuth) {
         console.log('Auth check timeout reached in Creator page');
         setIsCheckingAuth(false);
-        
-        if (!userId) {
-          navigate('/auth', { state: { returnUrl: '/create' } });
-        }
       }
-    }, 2000); // Reduced from 3000ms for faster response
+    }, 2000);
 
     // Set up auth state change listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -122,10 +106,21 @@ const Creator = () => {
 
     return () => {
       isMounted = false;
-      clearTimeout(authTimeout);
+      if (authCheckTimeout) {
+        clearTimeout(authCheckTimeout);
+      }
       subscription.unsubscribe();
     };
-  }, [navigate, authCheckAttempts]);
+  }, [navigate]);
+
+  // Effect to handle navigation if user is not authenticated
+  useEffect(() => {
+    if (!isCheckingAuth && !userId) {
+      // Only navigate if we've finished checking and there's no user
+      console.log('User not authenticated, redirecting to auth page');
+      navigate('/auth', { state: { returnUrl: '/create' } });
+    }
+  }, [isCheckingAuth, userId, navigate]);
 
   // Scroll to pricing section if the URL has #pricing
   useEffect(() => {
@@ -150,6 +145,8 @@ const Creator = () => {
     );
   }
 
+  // If we get here, we've finished checking and the user is authenticated
+  // (otherwise they would have been redirected by the effect above)
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background/95 to-muted/30">
       <Header />

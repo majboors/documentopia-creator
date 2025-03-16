@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -32,6 +31,19 @@ const Auth = () => {
       try {
         setCheckingSession(true);
         console.log('Auth: Checking for existing session...');
+        
+        // First check sessionStorage for existing user
+        const storedUser = sessionStorage.getItem('supabase_auth_user');
+        if (storedUser) {
+          console.log('Auth: Found stored user session, redirecting to:', returnUrl);
+          if (isMounted) {
+            // Set a direct redirect to ensure consistent navigation
+            window.location.href = returnUrl;
+            return;
+          }
+        }
+        
+        // If not in sessionStorage, check with Supabase
         const { data, error } = await supabase.auth.getSession();
         
         if (error) {
@@ -50,10 +62,7 @@ const Auth = () => {
           // Store session data in sessionStorage to ensure it's accessible across page refreshes
           sessionStorage.setItem('supabase_auth_user', JSON.stringify(data.session.user));
           
-          // Store the return URL in localStorage for post-redirect use
-          localStorage.setItem('auth_redirect_url', returnUrl);
-          
-          // Force a refresh for immediate redirect
+          // Use window.location for more reliable redirect
           window.location.href = returnUrl;
         } else if (isMounted) {
           setCheckingSession(false);
@@ -66,13 +75,13 @@ const Auth = () => {
       }
     };
     
-    // Shorter timeout for checking session
+    // Set a timeout for checking session to prevent infinite loading
     sessionCheckTimeout = setTimeout(() => {
       if (isMounted && checkingSession) {
         console.log('Session check timeout reached in Auth');
         setCheckingSession(false);
       }
-    }, 1000); // Reduced further to 1 second
+    }, 1500);
     
     checkSession();
     
@@ -82,27 +91,14 @@ const Auth = () => {
         
         if (!isMounted) return;
         
-        if (session && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION')) {
+        if (session && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
           console.log('Auth: User signed in, redirecting to:', returnUrl);
           
           // Store session data for cross-page persistence
           sessionStorage.setItem('supabase_auth_user', JSON.stringify(session.user));
           
-          // For a more reliable redirect after authentication
-          if (event === 'SIGNED_IN') {
-            // Store return URL for post-redirect use
-            localStorage.setItem('auth_redirect_url', returnUrl);
-            
-            // Immediate redirect
-            window.location.href = returnUrl;
-          } else {
-            // For other events, use regular navigation
-            setTimeout(() => {
-              if (isMounted) {
-                navigate(returnUrl);
-              }
-            }, 100); // Smaller delay
-          }
+          // Use window.location for more reliable redirect
+          window.location.href = returnUrl;
         }
       }
     );
@@ -146,8 +142,7 @@ const Auth = () => {
         description: "You have successfully signed in.",
       });
       
-      // More reliable redirect after sign-in
-      localStorage.setItem('auth_redirect_url', returnUrl);
+      // Use window.location for more reliable redirect
       window.location.href = returnUrl;
     } catch (error: any) {
       console.error('Sign in error:', error.message);
@@ -199,8 +194,7 @@ const Auth = () => {
           description: "Your account has been created and you are now logged in.",
         });
         
-        // Immediate redirect
-        localStorage.setItem('auth_redirect_url', returnUrl);
+        // Use window.location for more reliable redirect
         window.location.href = returnUrl;
       } else {
         toast({

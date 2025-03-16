@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -24,7 +23,6 @@ const Auth = () => {
   const [password, setPassword] = useState('');
   const [activeTab, setActiveTab] = useState('signin');
 
-  // Check if user is already logged in
   useEffect(() => {
     let isMounted = true;
     let sessionCheckTimeout: NodeJS.Timeout;
@@ -32,6 +30,7 @@ const Auth = () => {
     const checkSession = async () => {
       try {
         setCheckingSession(true);
+        console.log('Checking for existing session...');
         const { data, error } = await supabase.auth.getSession();
         
         if (error) {
@@ -42,9 +41,15 @@ const Auth = () => {
           return;
         }
         
+        console.log('Session check result:', data.session ? 'Active session found' : 'No active session');
+        
         if (data.session && isMounted) {
-          // User is already logged in, redirect to return URL
-          navigate(returnUrl);
+          console.log('User is already logged in, redirecting to:', returnUrl);
+          setTimeout(() => {
+            if (isMounted) {
+              navigate(returnUrl);
+            }
+          }, 500);
         } else if (isMounted) {
           setCheckingSession(false);
         }
@@ -56,7 +61,6 @@ const Auth = () => {
       }
     };
     
-    // Set a timeout to prevent getting stuck
     sessionCheckTimeout = setTimeout(() => {
       if (isMounted && checkingSession) {
         console.log('Session check timeout reached');
@@ -66,16 +70,19 @@ const Auth = () => {
     
     checkSession();
     
-    // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        console.log('Auth state changed:', event);
+        console.log('Auth state changed:', event, session ? 'with session' : 'no session');
         
         if (!isMounted) return;
         
-        if (session && event === 'SIGNED_IN') {
-          // User signed in, redirect to return URL
-          navigate(returnUrl);
+        if (session && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION')) {
+          console.log('User signed in, redirecting to:', returnUrl);
+          setTimeout(() => {
+            if (isMounted) {
+              navigate(returnUrl);
+            }
+          }, 500);
         }
       }
     );
@@ -101,14 +108,16 @@ const Auth = () => {
     
     try {
       setLoading(true);
-      const { error } = await supabase.auth.signInWithPassword({
+      console.log('Attempting to sign in with email:', email);
+      const { error, data } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
       
       if (error) throw error;
       
-      // Success notification
+      console.log('Sign in successful:', data.user?.id);
+      
       toast({
         title: 'Welcome back!',
         description: 'You have successfully signed in.',
@@ -116,6 +125,7 @@ const Auth = () => {
       
       // Redirect is handled by the onAuthStateChange listener
     } catch (error: any) {
+      console.error('Sign in error:', error.message);
       toast({
         title: 'Error signing in',
         description: error.message || 'An error occurred during sign in',
@@ -140,21 +150,29 @@ const Auth = () => {
     
     try {
       setLoading(true);
-      const { error } = await supabase.auth.signUp({
+      console.log('Attempting to sign up with email:', email);
+      const { error, data } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          emailRedirectTo: window.location.origin + '/create',
+        }
       });
       
       if (error) throw error;
       
+      console.log('Sign up successful:', data);
+      
       toast({
         title: 'Success',
-        description: 'Check your email for the confirmation link',
+        description: 'Check your email for the confirmation link or continue if auto-confirmed',
       });
       
-      // Switch to sign in tab
-      setActiveTab('signin');
+      if (!data.session) {
+        setActiveTab('signin');
+      }
     } catch (error: any) {
+      console.error('Sign up error:', error.message);
       toast({
         title: 'Error signing up',
         description: error.message || 'An error occurred during sign up',
@@ -306,3 +324,4 @@ const Auth = () => {
 };
 
 export default Auth;
+

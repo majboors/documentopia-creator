@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Textarea } from "@/components/ui/textarea"
@@ -38,6 +39,7 @@ const DocumentCreator = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [authCheckTimeout, setAuthCheckTimeout] = useState<NodeJS.Timeout | null>(null);
 
+  // Fix the auth state tracking
   useEffect(() => {
     let isMounted = true;
     
@@ -47,6 +49,7 @@ const DocumentCreator = () => {
       setCheckingAuthStatus(true);
       
       try {
+        // Get the current session
         const { data, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError) {
@@ -58,23 +61,30 @@ const DocumentCreator = () => {
           return;
         }
         
+        // Check if we have a valid session with a user
         if (data.session?.user?.id) {
+          console.log('User is authenticated, user ID:', data.session.user.id);
+          
           if (isMounted) {
             setUserId(data.session.user.id);
             setIsAuthenticated(true);
           }
           
+          // Check local storage for trial usage
           const localTrialUsed = localStorage.getItem(`${TRIAL_USED_KEY}_${data.session.user.id}`);
           if (localTrialUsed === 'true' && isMounted) {
             setFreeTrialUsed(true);
           }
           
           try {
+            // Get subscription info from database
             const { data: subscriptionData, error } = await supabase
               .from('user_subscriptions')
               .select('free_trial_used, is_subscribed')
               .eq('user_id', data.session.user.id)
               .maybeSingle();
+            
+            console.log('Subscription data:', subscriptionData);
             
             if (error) {
               console.error('Error fetching subscription status:', error);
@@ -82,11 +92,14 @@ const DocumentCreator = () => {
               setFreeTrialUsed(subscriptionData.free_trial_used || false);
               setIsSubscribed(subscriptionData.is_subscribed || false);
               
+              // Update local storage
               localStorage.setItem(
                 `${TRIAL_USED_KEY}_${data.session.user.id}`, 
                 subscriptionData.free_trial_used ? 'true' : 'false'
               );
             } else if (isMounted) {
+              // No subscription record found, create one
+              console.log('Creating new user subscription record');
               const { error: insertError } = await supabase
                 .from('user_subscriptions')
                 .insert({
@@ -101,38 +114,48 @@ const DocumentCreator = () => {
             }
           } catch (error) {
             console.error('Error in subscription status check:', error);
+          } finally {
+            if (isMounted) {
+              setCheckingAuthStatus(false);
+            }
           }
         } else if (isMounted) {
+          console.log('User is not authenticated');
           setUserId(null);
           setIsAuthenticated(false);
+          setCheckingAuthStatus(false);
         }
       } catch (error) {
         console.error('Error in checkUserStatus:', error);
         if (isMounted) {
           setIsAuthenticated(false);
-        }
-      } finally {
-        if (isMounted) {
           setCheckingAuthStatus(false);
         }
       }
     };
     
+    // Set a timeout to prevent getting stuck in checking state
     const timeout = setTimeout(() => {
       if (isMounted && checkingAuthStatus) {
         console.log('Auth check timeout reached, clearing stuck state');
         setCheckingAuthStatus(false);
-        setIsAuthenticated(false);
+        
+        // If we still don't know the auth state, assume not authenticated
+        if (isAuthenticated === null) {
+          setIsAuthenticated(false);
+        }
       }
     }, 5000);
     
     setAuthCheckTimeout(timeout);
     
+    // Initial check
     checkUserStatus();
     
+    // Set up auth state change listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Auth state changed:', event);
+        console.log('Auth state changed:', event, session ? 'with session' : 'no session');
         
         if (!isMounted) return;
         
@@ -142,11 +165,13 @@ const DocumentCreator = () => {
           setFreeTrialUsed(false);
           setIsSubscribed(false);
           setCheckingAuthStatus(false);
-        } else if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
+        } else if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') && session) {
+          console.log('User signed in or session refreshed:', session.user.id);
           setIsAuthenticated(true);
           setUserId(session.user.id);
           
           try {
+            // Get subscription info
             const { data, error } = await supabase
               .from('user_subscriptions')
               .select('free_trial_used, is_subscribed')
@@ -160,6 +185,8 @@ const DocumentCreator = () => {
               setIsSubscribed(data.is_subscribed || false);
               localStorage.setItem(`${TRIAL_USED_KEY}_${session.user.id}`, data.free_trial_used ? 'true' : 'false');
             } else {
+              // Create new subscription record if none exists
+              console.log('Creating new user subscription record after auth change');
               const { error: insertError } = await supabase
                 .from('user_subscriptions')
                 .insert({
@@ -364,6 +391,7 @@ const DocumentCreator = () => {
       );
     }
     
+    // This is what's shown when user isn't authenticated
     if (!isAuthenticated) {
       return (
         <Alert variant="default" className="mb-4 bg-primary/10 border-primary/20">
@@ -412,7 +440,7 @@ const DocumentCreator = () => {
     
     return (
       <Alert variant="default" className="mb-4 bg-blue-500/10 border-blue-500/20">
-        <BookOpenIcon className="h-4 w-4 text-blue-500" />
+        <BookOpenIcon className="h-4 w-5 text-blue-500" />
         <AlertTitle>Free Trial Available</AlertTitle>
         <AlertDescription>
           You can generate one document for free. Upgrade for unlimited access.

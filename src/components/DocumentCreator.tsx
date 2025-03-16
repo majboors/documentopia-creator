@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
@@ -12,12 +12,16 @@ import { toast } from '@/hooks/use-toast';
 import { Toaster } from "@/components/ui/toaster";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Link2Icon } from "lucide-react";
+import { supabase } from '@/integrations/supabase/client';
+import SubscriptionModal from '@/components/SubscriptionModal';
 
 interface GenerateDocumentResponse {
   success: boolean;
   download_url: string;
   filename: string;
 }
+
+const TRIAL_USED_KEY = 'document_trial_used';
 
 const DocumentCreator = () => {
   const navigate = useNavigate();
@@ -26,9 +30,84 @@ const DocumentCreator = () => {
   const [numPages, setNumPages] = useState(3);
   const [documentUrl, setDocumentUrl] = useState<string | null>(null);
   const [filename, setFilename] = useState<string | null>(null);
+  const [freeTrialUsed, setFreeTrialUsed] = useState(false);
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+
+  // Check user subscription status on component mount
+  useEffect(() => {
+    const checkUserStatus = async () => {
+      // Get the current user
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.user?.id) {
+        setUserId(session.user.id);
+        
+        // First check localStorage for a quick response
+        const localTrialUsed = localStorage.getItem(`${TRIAL_USED_KEY}_${session.user.id}`);
+        if (localTrialUsed === 'true') {
+          setFreeTrialUsed(true);
+        }
+        
+        // Then check Supabase for the accurate status
+        try {
+          const { data, error } = await supabase
+            .from('user_subscriptions')
+            .select('free_trial_used, is_subscribed')
+            .eq('user_id', session.user.id)
+            .maybeSingle();
+          
+          if (error) {
+            console.error('Error fetching subscription status:', error);
+            return;
+          }
+          
+          if (data) {
+            setFreeTrialUsed(data.free_trial_used || false);
+            setIsSubscribed(data.is_subscribed || false);
+            
+            // Update localStorage to match the database
+            localStorage.setItem(`${TRIAL_USED_KEY}_${session.user.id}`, data.free_trial_used ? 'true' : 'false');
+          }
+        } catch (error) {
+          console.error('Error in subscription status check:', error);
+        }
+      } else {
+        // For unauthenticated users, we'll rely on the AuthCheck component
+        setUserId(null);
+      }
+    };
+    
+    checkUserStatus();
+  }, []);
 
   const handleSignIn = () => {
     navigate('/auth', { state: { returnUrl: '/create' } });
+  };
+
+  const updateTrialUsage = async () => {
+    if (!userId) return;
+    
+    try {
+      // Call Supabase Edge Function to update user subscription
+      const { data, error } = await supabase.functions.invoke('update-document-usage', {
+        body: { user_id: userId, count: 1 }
+      });
+      
+      if (error) {
+        console.error('Error updating trial usage:', error);
+        return;
+      }
+      
+      // Update local state and localStorage
+      setFreeTrialUsed(true);
+      localStorage.setItem(`${TRIAL_USED_KEY}_${userId}`, 'true');
+      
+    } catch (error) {
+      console.error('Error in updateTrialUsage:', error);
+    }
   };
 
   const generateDocument = async (e: React.FormEvent) => {
@@ -39,7 +118,13 @@ const DocumentCreator = () => {
         title: "Please enter a topic",
         description: "You must enter a topic to generate a document.",
         variant: "destructive",
-      })
+      });
+      return;
+    }
+
+    // Check if user has used their free trial and is not subscribed
+    if (freeTrialUsed && !isSubscribed && userId) {
+      setShowSubscriptionModal(true);
       return;
     }
 
@@ -74,6 +159,12 @@ const DocumentCreator = () => {
         
         setDocumentUrl(formattedUrl);
         setFilename(data.filename);
+        
+        // Update trial usage in database if this is the first time
+        if (!freeTrialUsed && userId) {
+          await updateTrialUsage();
+        }
+        
         toast({
           title: "Document Generated",
           description: "Your document has been successfully generated.",
@@ -86,7 +177,7 @@ const DocumentCreator = () => {
         title: "Error",
         description: error.message || "Something went wrong. Please try again.",
         variant: "destructive",
-      })
+      });
     } finally {
       setIsLoading(false);
     }
@@ -96,6 +187,24 @@ const DocumentCreator = () => {
     if (documentUrl) {
       window.open(documentUrl, '_blank');
     }
+  };
+
+  const handlePayment = async () => {
+    setIsProcessingPayment(true);
+    
+    // Mock payment process - in a real app this would redirect to a payment gateway
+    setTimeout(() => {
+      toast({
+        title: "Subscription Required",
+        description: "This is a demo. In a real app, you would be redirected to a payment gateway.",
+      });
+      setIsProcessingPayment(false);
+      setShowSubscriptionModal(false);
+    }, 2000);
+  };
+
+  const closeSubscriptionModal = () => {
+    setShowSubscriptionModal(false);
   };
 
   return (
@@ -190,6 +299,12 @@ const DocumentCreator = () => {
           </CardFooter>
         </Card>
       </div>
+      <SubscriptionModal 
+        isOpen={showSubscriptionModal}
+        onClose={closeSubscriptionModal}
+        onPayment={handlePayment}
+        isProcessing={isProcessingPayment}
+      />
       <Toaster />
     </div>
   );

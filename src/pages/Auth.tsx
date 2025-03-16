@@ -31,7 +31,7 @@ const Auth = () => {
     const checkSession = async () => {
       try {
         setCheckingSession(true);
-        console.log('Checking for existing session...');
+        console.log('Auth: Checking for existing session...');
         const { data, error } = await supabase.auth.getSession();
         
         if (error) {
@@ -42,15 +42,16 @@ const Auth = () => {
           return;
         }
         
-        console.log('Session check result:', data.session ? 'Active session found' : 'No active session');
+        console.log('Auth: Session check result:', data.session ? 'Active session found' : 'No active session');
         
         if (data.session && isMounted) {
-          console.log('User is already logged in, redirecting to:', returnUrl);
-          setTimeout(() => {
-            if (isMounted) {
-              navigate(returnUrl);
-            }
-          }, 500);
+          console.log('Auth: User is already logged in, redirecting to:', returnUrl);
+          
+          // Store the return URL in localStorage for post-redirect use
+          localStorage.setItem('auth_redirect_url', returnUrl);
+          
+          // Force a refresh for immediate redirect
+          window.location.href = returnUrl;
         } else if (isMounted) {
           setCheckingSession(false);
         }
@@ -65,33 +66,36 @@ const Auth = () => {
     // Shorter timeout for checking session
     sessionCheckTimeout = setTimeout(() => {
       if (isMounted && checkingSession) {
-        console.log('Session check timeout reached');
+        console.log('Session check timeout reached in Auth');
         setCheckingSession(false);
       }
-    }, 2000); // Reduced from 3000ms to 2000ms
+    }, 1500); // Reduced further to 1.5s
     
     checkSession();
     
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        console.log('Auth state changed:', event, session ? 'with session' : 'no session');
+        console.log('Auth: Auth state changed:', event, session ? 'with session' : 'no session');
         
         if (!isMounted) return;
         
         if (session && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION')) {
-          console.log('User signed in, redirecting to:', returnUrl);
+          console.log('Auth: User signed in, redirecting to:', returnUrl);
           
-          // Force a refresh of the page to ensure authentication state is updated everywhere
+          // For a more reliable redirect after authentication
           if (event === 'SIGNED_IN') {
+            // Store return URL for post-redirect use
             localStorage.setItem('auth_redirect_url', returnUrl);
+            
+            // Immediate redirect
             window.location.href = returnUrl;
           } else {
-            // For other events, use navigate
+            // For other events, use regular navigation
             setTimeout(() => {
               if (isMounted) {
                 navigate(returnUrl);
               }
-            }, 300);
+            }, 100); // Smaller delay
           }
         }
       }
@@ -109,16 +113,16 @@ const Auth = () => {
     
     if (!email || !password) {
       toast({
-        title: 'Error',
-        description: 'Please enter both email and password',
-        variant: 'destructive',
+        title: "Error",
+        description: "Please enter both email and password",
+        variant: "destructive",
       });
       return;
     }
     
     try {
       setLoading(true);
-      console.log('Attempting to sign in with email:', email);
+      console.log('Auth: Attempting to sign in with email:', email);
       const { error, data } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -126,22 +130,22 @@ const Auth = () => {
       
       if (error) throw error;
       
-      console.log('Sign in successful:', data.user?.id);
+      console.log('Auth: Sign in successful:', data.user?.id);
       
       toast({
-        title: 'Welcome back!',
-        description: 'You have successfully signed in.',
+        title: "Welcome back!",
+        description: "You have successfully signed in.",
       });
       
-      // Force a redirect instead of relying solely on onAuthStateChange
+      // More reliable redirect after sign-in
       localStorage.setItem('auth_redirect_url', returnUrl);
       window.location.href = returnUrl;
     } catch (error: any) {
       console.error('Sign in error:', error.message);
       toast({
-        title: 'Error signing in',
+        title: "Error signing in",
         description: error.message || 'An error occurred during sign in',
-        variant: 'destructive',
+        variant: "destructive",
       });
     } finally {
       setLoading(false);
@@ -153,16 +157,16 @@ const Auth = () => {
     
     if (!email || !password) {
       toast({
-        title: 'Error',
-        description: 'Please enter both email and password',
-        variant: 'destructive',
+        title: "Error",
+        description: "Please enter both email and password",
+        variant: "destructive",
       });
       return;
     }
     
     try {
       setLoading(true);
-      console.log('Attempting to sign up with email:', email);
+      console.log('Auth: Attempting to sign up with email:', email);
       const { error, data } = await supabase.auth.signUp({
         email,
         password,
@@ -173,30 +177,30 @@ const Auth = () => {
       
       if (error) throw error;
       
-      console.log('Sign up successful:', data);
+      console.log('Auth: Sign up successful:', data);
       
       if (data.session) {
         toast({
-          title: 'Account Created',
-          description: 'Your account has been created and you are now logged in.',
+          title: "Account Created",
+          description: "Your account has been created and you are now logged in.",
         });
         
-        // Force a redirect instead of relying solely on onAuthStateChange
+        // Immediate redirect
         localStorage.setItem('auth_redirect_url', returnUrl);
         window.location.href = returnUrl;
       } else {
         toast({
-          title: 'Success',
-          description: 'Check your email for the confirmation link.',
+          title: "Success",
+          description: "Check your email for the confirmation link.",
         });
         setActiveTab('signin');
       }
     } catch (error: any) {
       console.error('Sign up error:', error.message);
       toast({
-        title: 'Error signing up',
+        title: "Error signing up",
         description: error.message || 'An error occurred during sign up',
-        variant: 'destructive',
+        variant: "destructive",
       });
     } finally {
       setLoading(false);

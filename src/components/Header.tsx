@@ -48,28 +48,30 @@ const Header: React.FC = () => {
 
   const handleSignOut = async () => {
     try {
-      const { error } = await supabase.auth.signOut();
+      // Force clear the session locally regardless of server response
+      const { error } = await supabase.auth.signOut({ scope: 'local' });
+      
+      // Even if there's an error, we want to update local state and navigate away
+      setIsAuthenticated(false);
+      setIsSubscribed(false);
+      
+      // Show success toast and navigate home
+      toast({
+        title: "Signed Out",
+        description: "You have been successfully signed out.",
+      });
+      navigate('/');
+      
+      // Log error if any, but don't prevent the user from continuing
       if (error) {
         console.error('Error signing out:', error);
-        toast({
-          title: "Sign Out Failed",
-          description: "There was an error signing out. Please try again.",
-          variant: "destructive"
-        });
-      } else {
-        toast({
-          title: "Signed Out",
-          description: "You have been successfully signed out.",
-        });
-        navigate('/');
       }
     } catch (error) {
       console.error('Unexpected error during sign out:', error);
-      toast({
-        title: "Sign Out Failed",
-        description: "An unexpected error occurred. Please try again.",
-        variant: "destructive"
-      });
+      // We still want to clear local state even if there was an error
+      setIsAuthenticated(false);
+      setIsSubscribed(false);
+      navigate('/');
     }
   };
 
